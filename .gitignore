@@ -27,6 +27,9 @@ prisma/migrations/dev.db
 .claude/
 .codemie/
 
+# Private local notes
+INTERVIEW_PREP.md
+
 # OS
 .DS_Store
 Thumbs.db

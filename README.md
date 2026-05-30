@@ -171,6 +171,76 @@ Unused subscriptions (`isLikelyUnused`) are surfaced with annual cost on the lea
 
 ---
 
+## How to Use
+
+### 1. Create an account
+
+Go to `http://localhost:3000/signup` (or your deployed URL), enter your email and password, and sign in.
+
+### 2. Export your bank statement as a CSV
+
+SpendWise supports HDFC, ICICI, SBI, and Axis Bank formats. Here's how to export from each:
+
+| Bank | Steps |
+|------|-------|
+| **HDFC** | Net Banking → Accounts → Last 3/6 months → Download → CSV |
+| **ICICI** | iMobile / Net Banking → Statements → Download Statement → Excel/CSV |
+| **SBI** | YONO / Net Banking → e-Statements → Select date range → Download CSV |
+| **Axis** | Net Banking → Accounts → Account Statement → CSV Download |
+
+> The file must include at minimum: a date column, a description/narration column, and debit/credit amount columns. SpendWise normalises column name differences automatically.
+
+### 3. Upload the CSV
+
+1. Navigate to **Dashboard → Upload Statement**
+2. Select your exported CSV file
+3. Click **Upload**
+
+Three background jobs start immediately:
+- Transactions are embedded and indexed for AI search
+- Subscriptions are detected and scored
+- Weekly spending summaries are computed
+
+Processing typically completes in under 30 seconds. The dashboard updates automatically.
+
+### 4. Review your transactions
+
+Go to **Transactions** to see every charge with automatic categories (Food, Transport, Utilities, etc.). You can edit any category inline if the automatic classification is wrong.
+
+### 5. Find subscription leaks
+
+Go to **Subscriptions** to see recurring charges detected by the algorithm. Each card shows:
+- Merchant name and detected billing cycle
+- Confidence score (higher = more likely a real subscription)
+- Estimated annual cost
+- "Likely unused" flag if you haven't been charged in the last 60 days
+
+Click **Dismiss** on any false positives (e.g. rent, EMI) to remove them from the leaks view.
+
+### 6. Read your weekly insights
+
+Go to **Insights** for AI-generated weekly summaries. Each week shows total spend, top spending categories, top merchants, and Claude's recommendations for where you can cut back.
+
+### 7. Chat with the AI assistant
+
+On the **Insights** page, use the chat box to ask questions about your own spending history. The assistant retrieves your actual transactions before answering.
+
+**Example questions:**
+- "How much did I spend on food in April?"
+- "What was my biggest single expense last month?"
+- "Am I spending more on subscriptions than last quarter?"
+- "Which week did I spend the most overall?"
+
+The AI only has access to your own transaction data — it cannot see other users' data.
+
+### 8. Email alerts
+
+If your account email is verified, SpendWise sends:
+- A notification when a new subscription leak is detected
+- A weekly digest every Monday with your previous week's summary
+
+---
+
 ## License
 
 MIT
