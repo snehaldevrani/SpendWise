@@ -1,0 +1,109 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-api:
+    name: API — build & test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: spendwise
+          POSTGRES_PASSWORD: spendwise
+          POSTGRES_DB: spendwise
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://spendwise:spendwise@localhost:5432/spendwise?sslmode=disable
+      JWT_SECRET: ci-secret-at-least-32-chars-xxxxxx
+      ANTHROPIC_API_KEY: placeholder
+      VOYAGE_API_KEY: placeholder
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run DB migrations
+        run: |
+          docker run --rm --network host \
+            -e PGPASSWORD=spendwise \
+            pgvector/pgvector:pg16 \
+            psql -h localhost -U spendwise -d spendwise -f /dev/stdin \
+            < apps/api/prisma/init.sql || \
+          PGPASSWORD=spendwise psql -h localhost -U spendwise -d spendwise \
+            -f apps/api/prisma/init.sql
+
+      - name: Generate Prisma client
+        run: npm run prisma:generate --workspace=apps/api
+
+      - name: Build API
+        run: npm run build --workspace=apps/api
+
+      - name: Run API tests
+        run: npm test --workspace=apps/api
+
+  build-web:
+    name: Web — type-check & build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web
+        run: npm run build --workspace=apps/web
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:3001/api
+
+  build-mcp:
+    name: MCP server — build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build MCP server
+        run: npm run build --workspace=apps/mcp-server

@@ -1,0 +1,141 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  transactions  Transaction[]
+  subscriptions Subscription[]
+  insights      Insight[]
+  documents     Document[]
+  refreshTokens RefreshToken[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String   @map("user_id")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+model Transaction {
+  id       String          @id @default(cuid())
+  userId   String          @map("user_id")
+  date     DateTime
+  merchant String
+  amount   Decimal         @db.Decimal(12, 2)
+  currency String          @default("INR")
+  category TransactionCategory @default(other)
+  type     TransactionType
+  rawText  String          @map("raw_text")
+  dedupKey String          @map("dedup_key")
+
+  // pgvector — 1024 dims (Voyage AI voyage-3-lite)
+  embedding Unsupported("vector(1024)")?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, dedupKey])
+  @@index([userId, date])
+  @@index([userId, category])
+  @@index([userId, merchant])
+  @@map("transactions")
+}
+
+model Subscription {
+  id                 String   @id @default(cuid())
+  userId             String   @map("user_id")
+  merchant           String
+  estimatedCycleDays Int      @map("estimated_cycle_days")
+  avgAmount          Decimal  @map("avg_amount") @db.Decimal(12, 2)
+  confidenceScore    Float    @map("confidence_score")
+  lastChargeDate     DateTime @map("last_charge_date")
+  nextExpectedDate   DateTime @map("next_expected_date")
+  dismissed          Boolean  @default(false)
+  confirmed          Boolean  @default(false)
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, merchant])
+  @@map("subscriptions")
+}
+
+model Insight {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  weekStart   DateTime @map("week_start")
+  summaryJson Json     @map("summary_json")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, weekStart])
+  @@map("insights")
+}
+
+model Document {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  filename    String
+  contentType String   @map("content_type")
+  uploadedAt  DateTime @default(now()) @map("uploaded_at")
+
+  chunks DocumentChunk[]
+  user   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("documents")
+}
+
+model DocumentChunk {
+  id         String @id @default(cuid())
+  documentId String @map("document_id")
+  userId     String @map("user_id")
+  chunkText  String @map("chunk_text")
+  chunkIndex Int    @map("chunk_index")
+
+  embedding Unsupported("vector(1024)")?
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("document_chunks")
+}
+
+enum TransactionType {
+  debit
+  credit
+}
+
+enum TransactionCategory {
+  food
+  travel
+  utilities
+  entertainment
+  health
+  shopping
+  subscriptions
+  income
+  other
+}

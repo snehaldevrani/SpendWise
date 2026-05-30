@@ -1,0 +1,13 @@
+{
+  "_comment": "Add this block to your Claude Desktop mcpServers config at ~/Library/Application Support/Claude/claude_desktop_config.json (Mac) or %APPDATA%\\Claude\\claude_desktop_config.json (Windows)",
+  "mcpServers": {
+    "spendwise": {
+      "command": "node",
+      "args": ["C:/Users/SnehalDevrani/Desktop/SpendWise/apps/mcp-server/dist/index.js"],
+      "env": {
+        "SPENDWISE_API_URL": "http://localhost:3001/api",
+        "SPENDWISE_API_KEY": "PASTE_YOUR_JWT_TOKEN_HERE"
+      }
+    }
+  }
+}
