@@ -1,318 +1,356 @@
-'use client';
-import { useQuery } from '@tanstack/react-query';
-import { TrendingUp, TrendingDown, Sparkles, UploadCloud, AlertTriangle, ArrowDownLeft, ArrowUpRight, PiggyBank } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Amount } from '@/components/ui/amount';
-import { CategoryBadge } from '@/components/ui/category-badge';
-import { EmptyState } from '@/components/ui/empty-state';
-import { DashboardSkeleton } from '@/components/ui/page-skeleton';
-import { SpendingAreaChart } from '@/components/dashboard/spending-area-chart';
-import { CategoryDonutChart } from '@/components/dashboard/category-donut-chart';
-import { AIInsightCard } from '@/components/dashboard/ai-insight-card';
-import { api } from '@/lib/api';
-import { formatDate, formatCurrency, CATEGORY_COLORS, CATEGORY_EMOJI, CATEGORY_LABELS } from '@/lib/utils';
-import { useUIStore } from '@/store';
-import type { Transaction, Subscription, AiRecommendation } from '@/lib/types';
+"use client";
 
-interface MonthlySummary {
-  month: number;
-  year: number;
-  total: number;
-  totalIncome: number;
-  savings: number;
-  breakdown: Array<{ category: string; total: number; count: number }>;
-}
+import {
+  ArrowUpRight,
+  ArrowDownRight,
+  Wallet,
+  TrendingUp,
+  CreditCard,
+  RefreshCw,
+} from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+} from "recharts";
 
-interface Overview {
-  current: MonthlySummary;
-  previous: MonthlySummary;
-  latestMonth: number;
-  latestYear: number;
-}
+// 60-day spending data
+const spendingData = Array.from({ length: 60 }, (_, i) => {
+  const date = new Date();
+  date.setDate(date.getDate() - (59 - i));
+  return {
+    date: date.toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
+    amount: Math.floor(Math.random() * 1500) + 500,
+  };
+});
 
-const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+// Category data
+const categoryData = [
+  { name: "Food & Dining", value: 8200, color: "#10b981" },
+  { name: "Shopping", value: 5400, color: "#3b82f6" },
+  { name: "Bills & Utilities", value: 4100, color: "#f59e0b" },
+  { name: "Transport", value: 2800, color: "#8b5cf6" },
+  { name: "Entertainment", value: 2100, color: "#ec4899" },
+  { name: "Others", value: 1750, color: "#6b7280" },
+];
 
-function StatCard({ label, value, sub, icon: Icon, color, valueColor }: {
-  label: string; value: string; sub: string;
-  icon: React.ElementType; color: string; valueColor?: string;
-}) {
-  return (
-    <Card className="p-4 lg:p-5">
-      <div className="flex items-start justify-between mb-3">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{label}</p>
-        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${color}`}>
-          <Icon className="h-4 w-4" />
-        </div>
-      </div>
-      <p className={`text-2xl font-bold font-mono ${valueColor ?? 'text-foreground'}`}>{value}</p>
-      <p className="text-xs text-muted-foreground mt-1">{sub}</p>
-    </Card>
-  );
-}
+// Recent transactions
+const transactions = [
+  { id: 1, date: "Today", merchant: "Swiggy", category: "🍔 Food", amount: -450, type: "debit" },
+  { id: 2, date: "Today", merchant: "Amazon Pay", category: "🛒 Shopping", amount: -2199, type: "debit" },
+  { id: 3, date: "Yesterday", merchant: "Salary Credit", category: "💰 Income", amount: 75000, type: "credit" },
+  { id: 4, date: "Yesterday", merchant: "Netflix", category: "🎬 Entertainment", amount: -649, type: "debit" },
+  { id: 5, date: "22 Jan", merchant: "Uber", category: "🚗 Transport", amount: -320, type: "debit" },
+  { id: 6, date: "22 Jan", merchant: "Electricity Bill", category: "💡 Bills", amount: -1850, type: "debit" },
+  { id: 7, date: "21 Jan", merchant: "Zomato", category: "🍔 Food", amount: -580, type: "debit" },
+  { id: 8, date: "21 Jan", merchant: "Reliance Fresh", category: "🛒 Shopping", amount: -920, type: "debit" },
+];
+
+// Active subscriptions preview
+const subscriptions = [
+  { name: "Netflix", amount: 649, cycle: "Monthly", logo: "🎬" },
+  { name: "Spotify", amount: 119, cycle: "Monthly", logo: "🎵" },
+  { name: "Amazon Prime", amount: 1499, cycle: "Yearly", logo: "📦" },
+];
+
+const statCards = [
+  {
+    title: "This Month",
+    value: "₹24,350",
+    change: "-8%",
+    trend: "down",
+    icon: Wallet,
+  },
+  {
+    title: "Last Month",
+    value: "₹26,500",
+    change: "+12%",
+    trend: "up",
+    icon: CreditCard,
+  },
+  {
+    title: "Savings",
+    value: "₹3,200",
+    change: "+15%",
+    trend: "up",
+    icon: TrendingUp,
+  },
+  {
+    title: "Active Subs",
+    value: "7",
+    change: "₹3,840/mo",
+    trend: "neutral",
+    icon: RefreshCw,
+  },
+];
 
 export default function DashboardPage() {
-  const { setUploadDialog } = useUIStore();
-
-  const { data: overview, isLoading: overviewLoading } = useQuery<Overview | null>({
-    queryKey: ['overview'],
-    queryFn: () => api.get('/transactions/overview').then((r) => r.data),
-  });
-
-  const { data: dailySpend } = useQuery<Array<{ date: string; amount: number }>>({
-    queryKey: ['daily-spend'],
-    queryFn: () => api.get('/transactions/daily-spend?days=60').then((r) => r.data),
-    enabled: !!overview,
-  });
-
-  const { data: transactionsRes, isLoading: txnLoading } = useQuery<{ total: number; items: Transaction[] }>({
-    queryKey: ['transactions', 'recent'],
-    queryFn: () => api.get('/transactions?limit=8').then((r) => r.data),
-  });
-
-  const { data: subscriptions } = useQuery<Subscription[]>({
-    queryKey: ['subscriptions'],
-    queryFn: () => api.get('/subscriptions').then((r) => r.data),
-  });
-
-  const { data: aiInsight } = useQuery<AiRecommendation>({
-    queryKey: ['ai-recommendations'],
-    queryFn: () => api.get('/ai/recommendations').then((r) => r.data),
-    staleTime: 60 * 60 * 1000,
-    retry: false,
-  });
-
-  const isLoading = overviewLoading || txnLoading;
-  const hasData = (transactionsRes?.total ?? 0) > 0;
-
-  if (isLoading) return <DashboardSkeleton />;
-
-  if (!hasData) {
-    return (
-      <EmptyState
-        icon={UploadCloud}
-        title="Your financial picture starts here"
-        description="Upload a bank statement CSV to see where your money goes, detect subscriptions, and get AI-powered savings recommendations."
-        action={{ label: 'Upload your first statement', onClick: () => setUploadDialog(true) }}
-        secondaryText="Supports CSV exports from HDFC, ICICI, SBI, Axis, and more."
-        className="min-h-[60vh]"
-      />
-    );
-  }
-
-  const current = overview?.current;
-  const previous = overview?.previous;
-  const monthLabel = current ? `${MONTH_NAMES[(current.month ?? 1) - 1]} ${current.year}` : '';
-  const totalSpend = current?.total ?? 0;
-  const totalIncome = current?.totalIncome ?? 0;
-  const savings = current?.savings ?? 0;
-  const prevSpend = previous?.total ?? 0;
-  const spendDelta = prevSpend > 0 ? ((totalSpend - prevSpend) / prevSpend) * 100 : 0;
-  const topCategory = current?.breakdown?.[0];
-  const subscriptionMonthly = subscriptions?.reduce((s, sub) => s + (Number(sub.avgAmount) * 30) / sub.estimatedCycleDays, 0) ?? 0;
-
   return (
-    <div className="space-y-5 pb-20 lg:pb-0">
-      {/* Month label */}
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          Showing <span className="font-semibold text-foreground">{monthLabel}</span>
-          {prevSpend > 0 && (
-            <span className={`ml-2 text-xs font-medium ${spendDelta > 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
-              {spendDelta > 0 ? '▲' : '▼'} {Math.abs(spendDelta).toFixed(1)}% vs {MONTH_NAMES[(previous!.month ?? 1) - 1]}
-            </span>
-          )}
-        </p>
-        <p className="text-xs text-muted-foreground">{transactionsRes?.total} transactions total</p>
-      </div>
-
-      {/* Stat cards — Money Out / In / Savings / Top Category */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard
-          label="Money Out"
-          value={formatCurrency(totalSpend)}
-          sub={monthLabel}
-          icon={ArrowUpRight}
-          color="bg-rose-100 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400"
-          valueColor="text-rose-600 dark:text-rose-400"
-        />
-        <StatCard
-          label="Money In"
-          value={formatCurrency(totalIncome)}
-          sub={monthLabel}
-          icon={ArrowDownLeft}
-          color="bg-emerald-100 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400"
-          valueColor="text-emerald-600 dark:text-emerald-400"
-        />
-        <StatCard
-          label="Net Savings"
-          value={savings >= 0 ? formatCurrency(savings) : `-${formatCurrency(Math.abs(savings))}`}
-          sub={savings >= 0 ? 'saved this month' : 'overspent this month'}
-          icon={PiggyBank}
-          color={savings >= 0
-            ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400'
-            : 'bg-rose-100 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400'}
-          valueColor={savings >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}
-        />
-        <StatCard
-          label="Top Category"
-          value={topCategory ? formatCurrency(topCategory.total) : '—'}
-          sub={topCategory ? `${CATEGORY_EMOJI[topCategory.category] ?? ''} ${CATEGORY_LABELS[topCategory.category] ?? topCategory.category} · ${topCategory.count} txns` : 'No data yet'}
-          icon={topCategory && totalSpend > 0 && topCategory.total / totalSpend > 0.3 ? TrendingUp : TrendingDown}
-          color="bg-blue-100 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400"
-        />
-      </div>
-
-      {/* Category breakdown bar */}
-      {current?.breakdown && current.breakdown.length > 0 && (
-        <Card className="p-4">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Spend by Category</p>
-          <div className="space-y-2">
-            {current.breakdown.slice(0, 6).map((cat) => {
-              const pct = totalSpend > 0 ? (cat.total / totalSpend) * 100 : 0;
-              return (
-                <div key={cat.category} className="flex items-center gap-3">
-                  <span className="text-sm w-28 shrink-0 text-foreground font-medium truncate">
-                    {CATEGORY_EMOJI[cat.category]} {CATEGORY_LABELS[cat.category] ?? cat.category}
-                  </span>
-                  <div className="flex-1 h-2 rounded-full bg-secondary overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all"
-                      style={{ width: `${pct}%`, backgroundColor: CATEGORY_COLORS[cat.category] ?? '#8b5cf6' }}
-                    />
-                  </div>
-                  <span className="text-xs font-mono text-muted-foreground w-14 text-right shrink-0">
-                    {formatCurrency(cat.total)}
-                  </span>
-                  <span className="text-xs text-muted-foreground w-10 text-right shrink-0">
-                    {pct.toFixed(0)}%
-                  </span>
-                </div>
-              );
-            })}
+    <div className="max-w-7xl mx-auto">
+          {/* Header */}
+          <div className="mb-8">
+            <h1 className="text-2xl font-bold text-white">Dashboard</h1>
+            <p className="text-zinc-400 mt-1">
+              Welcome back! Here&apos;s your financial overview.
+            </p>
           </div>
-        </Card>
-      )}
 
-      {/* Charts row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Card className="lg:col-span-2 p-5">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">
-            Daily Spend — Last 60 Days
-          </p>
-          {dailySpend && dailySpend.length > 0 ? (
-            <SpendingAreaChart data={dailySpend} />
-          ) : (
-            <div className="h-48 flex items-center justify-center">
-              <p className="text-sm text-muted-foreground">Loading chart…</p>
-            </div>
-          )}
-        </Card>
-
-        <Card className="p-5">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">
-            By Category — {monthLabel}
-          </p>
-          {current?.breakdown && current.breakdown.length > 0 ? (
-            <CategoryDonutChart data={current.breakdown} total={totalSpend} />
-          ) : (
-            <div className="h-48 flex items-center justify-center">
-              <p className="text-sm text-muted-foreground">No category data</p>
-            </div>
-          )}
-        </Card>
-      </div>
-
-      {/* Recent txns + right panel */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Card className="lg:col-span-2">
-          <CardHeader className="pb-2 pt-5 px-5">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Recent Transactions
-              </CardTitle>
-              <a href="/transactions" className="text-xs text-[var(--color-brand)] hover:underline font-medium">
-                View all {transactionsRes?.total} →
-              </a>
-            </div>
-          </CardHeader>
-          <CardContent className="px-0 pb-2">
-            <div className="divide-y divide-border">
-              {transactionsRes?.items.map((txn) => (
-                <div key={txn.id} className="flex items-center gap-3 px-5 py-3 hover:bg-secondary/50 transition-colors">
-                  <div
-                    className="w-8 h-8 rounded-full flex items-center justify-center text-sm flex-shrink-0"
-                    style={{ backgroundColor: `${CATEGORY_COLORS[txn.category] ?? '#cbd5e1'}20` }}
-                  >
-                    {CATEGORY_EMOJI[txn.category] ?? '📦'}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">{txn.merchant}</p>
-                    <p className="text-xs text-muted-foreground">{formatDate(txn.date, 'short')}</p>
-                  </div>
-                  <Amount value={txn.amount} positive={txn.type === 'credit'} size="sm" />
-                  <CategoryBadge category={txn.category} className="hidden sm:inline-flex" />
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        <div className="space-y-4">
-          {aiInsight ? (
-            <AIInsightCard insight={aiInsight} />
-          ) : (
-            <Card className="p-5 border-dashed">
-              <div className="flex flex-col items-center text-center gap-2 py-4">
-                <Sparkles className="h-8 w-8 text-muted-foreground/40" />
-                <p className="text-sm font-medium text-muted-foreground">AI insights unavailable</p>
-                <p className="text-xs text-muted-foreground/60">Add your Anthropic API key in Settings to enable</p>
-              </div>
-            </Card>
-          )}
-
-          {subscriptions && subscriptions.length > 0 && (
-            <Card className="p-4">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-                Subscriptions · <span className="text-[var(--color-brand)]">{formatCurrency(subscriptionMonthly)}/mo</span>
-              </p>
-              <div className="space-y-2.5">
-                {subscriptions.slice(0, 5).map((sub) => (
-                  <div key={sub.id} className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className="w-6 h-6 rounded-md bg-[var(--color-brand-muted)] flex items-center justify-center shrink-0">
-                        <span className="text-[10px] font-bold text-[var(--color-brand)]">
-                          {sub.merchant[0]?.toUpperCase()}
-                        </span>
-                      </div>
-                      <span className="text-sm text-foreground truncate">{sub.merchant}</span>
+          {/* Stat Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            {statCards.map((stat) => (
+              <Card
+                key={stat.title}
+                className="bg-zinc-900/50 border-white/10 backdrop-blur-sm"
+              >
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="p-2 rounded-xl bg-emerald-500/10">
+                      <stat.icon className="h-5 w-5 text-emerald-500" />
                     </div>
-                    <Amount value={Number(sub.avgAmount)} size="sm" />
+                    {stat.trend !== "neutral" && (
+                      <div
+                        className={`flex items-center gap-1 text-sm ${
+                          stat.trend === "up"
+                            ? "text-emerald-500"
+                            : "text-red-500"
+                        }`}
+                      >
+                        {stat.trend === "up" ? (
+                          <ArrowUpRight className="h-4 w-4" />
+                        ) : (
+                          <ArrowDownRight className="h-4 w-4" />
+                        )}
+                        {stat.change}
+                      </div>
+                    )}
+                    {stat.trend === "neutral" && (
+                      <span className="text-xs text-zinc-500">{stat.change}</span>
+                    )}
                   </div>
-                ))}
-              </div>
-              <a href="/subscriptions" className="text-xs text-[var(--color-brand)] hover:underline font-medium mt-3 block">
-                Manage all ({subscriptions.length}) →
-              </a>
-            </Card>
-          )}
-        </div>
-      </div>
-
-      {/* Leak alert */}
-      {subscriptions?.some((s) => s.isLikelyUnused) && (
-        <Card className="p-4 border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-semibold text-amber-800 dark:text-amber-400">Potential spend leaks</p>
-              <p className="text-xs text-amber-700 dark:text-amber-500 mt-0.5">
-                {subscriptions.filter((s) => s.isLikelyUnused).length} subscriptions haven&apos;t been used recently.{' '}
-                <a href="/subscriptions" className="underline font-medium">Review now →</a>
-              </p>
-            </div>
+                  <p className="text-zinc-400 text-sm">{stat.title}</p>
+                  <p className="text-2xl font-bold text-white mt-1">
+                    {stat.value}
+                  </p>
+                </CardContent>
+              </Card>
+            ))}
           </div>
-        </Card>
-      )}
+
+          {/* Charts */}
+          <div className="grid lg:grid-cols-3 gap-6 mb-8">
+            {/* Area Chart */}
+            <Card className="lg:col-span-2 bg-zinc-900/50 border-white/10 backdrop-blur-sm">
+              <CardHeader>
+                <CardTitle className="text-white">Spending Trend</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[300px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={spendingData}>
+                      <defs>
+                        <linearGradient
+                          id="colorAmount"
+                          x1="0"
+                          y1="0"
+                          x2="0"
+                          y2="1"
+                        >
+                          <stop
+                            offset="5%"
+                            stopColor="#10b981"
+                            stopOpacity={0.3}
+                          />
+                          <stop
+                            offset="95%"
+                            stopColor="#10b981"
+                            stopOpacity={0}
+                          />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke="#27272a"
+                        vertical={false}
+                      />
+                      <XAxis
+                        dataKey="date"
+                        stroke="#71717a"
+                        fontSize={12}
+                        tickLine={false}
+                        axisLine={false}
+                        interval={9}
+                      />
+                      <YAxis
+                        stroke="#71717a"
+                        fontSize={12}
+                        tickLine={false}
+                        axisLine={false}
+                        tickFormatter={(value) => `₹${value}`}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "#18181b",
+                          border: "1px solid #27272a",
+                          borderRadius: "8px",
+                        }}
+                        labelStyle={{ color: "#fff" }}
+                        formatter={(value) => [`₹${value ?? 0}`, "Spent"]}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="amount"
+                        stroke="#10b981"
+                        strokeWidth={2}
+                        fillOpacity={1}
+                        fill="url(#colorAmount)"
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Pie Chart */}
+            <Card className="bg-zinc-900/50 border-white/10 backdrop-blur-sm">
+              <CardHeader>
+                <CardTitle className="text-white">By Category</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[300px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={categoryData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={80}
+                        paddingAngle={4}
+                        dataKey="value"
+                      >
+                        {categoryData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "#18181b",
+                          border: "1px solid #27272a",
+                          borderRadius: "8px",
+                        }}
+                        formatter={(value) => [`₹${value ?? 0}`, ""]}
+                      />
+                      <Legend
+                        layout="vertical"
+                        align="right"
+                        verticalAlign="middle"
+                        iconType="circle"
+                        iconSize={8}
+                        formatter={(value) => (
+                          <span className="text-zinc-400 text-xs">{value}</span>
+                        )}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Transactions & Subscriptions */}
+          <div className="grid lg:grid-cols-3 gap-6">
+            {/* Recent Transactions */}
+            <Card className="lg:col-span-2 bg-zinc-900/50 border-white/10 backdrop-blur-sm">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="text-white">Recent Transactions</CardTitle>
+                <a
+                  href="/transactions"
+                  className="text-sm text-emerald-500 hover:underline"
+                >
+                  View all
+                </a>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {transactions.map((tx) => (
+                    <div
+                      key={tx.id}
+                      className="flex items-center justify-between py-3 border-b border-white/5 last:border-0"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="text-xs text-zinc-500 w-16">
+                          {tx.date}
+                        </div>
+                        <div>
+                          <p className="text-white font-medium">{tx.merchant}</p>
+                          <Badge
+                            variant="secondary"
+                            className="bg-zinc-800 text-zinc-400 text-xs mt-1"
+                          >
+                            {tx.category}
+                          </Badge>
+                        </div>
+                      </div>
+                      <span
+                        className={`font-semibold ${
+                          tx.type === "credit"
+                            ? "text-emerald-500"
+                            : "text-red-400"
+                        }`}
+                      >
+                        {tx.type === "credit" ? "+" : ""}₹
+                        {Math.abs(tx.amount).toLocaleString()}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Active Subscriptions */}
+            <Card className="bg-zinc-900/50 border-white/10 backdrop-blur-sm">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="text-white">Active Subscriptions</CardTitle>
+                <a
+                  href="/subscriptions"
+                  className="text-sm text-emerald-500 hover:underline"
+                >
+                  Manage
+                </a>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {subscriptions.map((sub) => (
+                    <div
+                      key={sub.name}
+                      className="flex items-center justify-between p-3 rounded-xl bg-zinc-800/50 border border-white/5"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl">{sub.logo}</span>
+                        <div>
+                          <p className="text-white font-medium">{sub.name}</p>
+                          <p className="text-zinc-500 text-xs">{sub.cycle}</p>
+                        </div>
+                      </div>
+                      <span className="text-white font-semibold">
+                        ₹{sub.amount}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
     </div>
   );
 }

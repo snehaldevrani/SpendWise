@@ -11,13 +11,13 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: { default: 'SpendWise', template: '%s · SpendWise' },
-  description: 'AI-powered personal finance intelligence',
+  title: 'SpendWise — AI-Powered Personal Finance for India',
+  description: 'Upload your bank statement. AI detects subscriptions, flags leaks, and answers questions about your spending.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className="dark" suppressHydrationWarning>
       <body className={`${inter.variable} font-sans antialiased`}>
         <Providers>
           {children}

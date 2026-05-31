@@ -1,242 +1,326 @@
-'use client';
-import { useState, useRef, useEffect } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
-import { Sparkles, Send, ArrowUp } from 'lucide-react';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Amount } from '@/components/ui/amount';
-import { api } from '@/lib/api';
-import { formatCurrency } from '@/lib/utils';
-import type { AiRecommendation } from '@/lib/types';
+"use client";
 
-interface ChatMessage { role: 'user' | 'assistant'; content: string; sources?: number; }
+import { useState } from "react";
+import { Send, Sparkles, TrendingDown, Lightbulb } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { cn } from "@/lib/utils";
 
-const SUGGESTED = [
-  'What did I spend most on last month?',
-  'Which subscriptions should I cancel?',
-  'How does this month compare to last?',
-  'What are my biggest spend leaks?',
+// Placeholder chat messages
+const initialMessages = [
+  {
+    id: 1,
+    role: "assistant" as const,
+    content:
+      "Hi! I'm your SpendWise AI assistant. I can help you understand your spending patterns, find savings opportunities, and answer questions about your finances. What would you like to know?",
+  },
+  {
+    id: 2,
+    role: "user" as const,
+    content: "What's my biggest spending category this month?",
+  },
+  {
+    id: 3,
+    role: "assistant" as const,
+    content:
+      "Based on your transactions this month, **Food & Dining** is your biggest spending category at ₹8,200 (33.7% of total spending). This includes orders from Swiggy, Zomato, and restaurant visits. Would you like tips on how to reduce food delivery expenses?",
+  },
+  {
+    id: 4,
+    role: "user" as const,
+    content: "Yes, give me some tips",
+  },
+  {
+    id: 5,
+    role: "assistant" as const,
+    content:
+      "Here are some personalized tips based on your spending:\n\n1. **Cook at home 2x more per week** - Could save ~₹800/month\n2. **Use Swiggy One membership** - You order ~8 times/month, membership pays off at 4+ orders\n3. **Set a weekly food budget** - Try ₹1,500/week and track via our app\n\nWant me to set up a food spending alert for you?",
+  },
+  {
+    id: 6,
+    role: "user" as const,
+    content: "How much am I spending on subscriptions?",
+  },
+  {
+    id: 7,
+    role: "assistant" as const,
+    content:
+      "You currently have **7 active subscriptions** totaling **₹3,840/month** (₹46,080/year):\n\n• Netflix: ₹649\n• Spotify: ₹119\n• Cult.fit: ₹833 ⚠️ Unused for 45 days\n• Adobe CC: ₹1,675 ⚠️ Low usage detected\n• iCloud: ₹75\n• Swiggy One: ₹489\n\nI've flagged 2 subscriptions that appear unused. Canceling them could save you **₹2,508/month**!",
+  },
+];
+
+const suggestedQuestions = [
+  "How much did I spend last week?",
+  "Find my unused subscriptions",
+  "Compare this month to last month",
+  "Where can I save money?",
+];
+
+// Weekly insight cards
+const weeklyInsights = [
+  {
+    week: "This Week",
+    totalSpend: 6850,
+    categories: [
+      { name: "Food", percentage: 35, color: "bg-orange-500" },
+      { name: "Shopping", percentage: 28, color: "bg-blue-500" },
+      { name: "Transport", percentage: 20, color: "bg-purple-500" },
+      { name: "Other", percentage: 17, color: "bg-zinc-500" },
+    ],
+    tip: "Your food spending is 12% higher than your weekly average. Consider meal prepping on weekends.",
+  },
+  {
+    week: "Last Week",
+    totalSpend: 8420,
+    categories: [
+      { name: "Shopping", percentage: 42, color: "bg-blue-500" },
+      { name: "Food", percentage: 30, color: "bg-orange-500" },
+      { name: "Bills", percentage: 18, color: "bg-yellow-500" },
+      { name: "Other", percentage: 10, color: "bg-zinc-500" },
+    ],
+    tip: "Large Amazon purchase detected. Set up price alerts for big purchases to catch deals.",
+  },
+  {
+    week: "2 Weeks Ago",
+    totalSpend: 5200,
+    categories: [
+      { name: "Bills", percentage: 48, color: "bg-yellow-500" },
+      { name: "Food", percentage: 25, color: "bg-orange-500" },
+      { name: "Transport", percentage: 15, color: "bg-purple-500" },
+      { name: "Other", percentage: 12, color: "bg-zinc-500" },
+    ],
+    tip: "Great week! Your spending was 22% below average. Keep up the mindful spending!",
+  },
+  {
+    week: "3 Weeks Ago",
+    totalSpend: 7100,
+    categories: [
+      { name: "Food", percentage: 38, color: "bg-orange-500" },
+      { name: "Entertainment", percentage: 25, color: "bg-pink-500" },
+      { name: "Transport", percentage: 22, color: "bg-purple-500" },
+      { name: "Other", percentage: 15, color: "bg-zinc-500" },
+    ],
+    tip: "Multiple streaming charges detected. Consider bundling services to save ₹200/month.",
+  },
 ];
 
 export default function InsightsPage() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState('');
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [messages, setMessages] = useState(initialMessages);
+  const [inputValue, setInputValue] = useState("");
+  const [isTyping, setIsTyping] = useState(false);
 
-  const { data: recommendations, isLoading } = useQuery<AiRecommendation>({
-    queryKey: ['ai-recommendations'],
-    queryFn: () => api.get('/ai/recommendations').then((r) => r.data),
-    staleTime: 60 * 60 * 1000,
-    retry: false,
-  });
+  const handleSend = () => {
+    if (!inputValue.trim()) return;
 
-  const chat = useMutation({
-    mutationFn: (question: string) =>
-      api.post('/ai/chat', { question }).then((r) => r.data as { answer: string; sourcesUsed: number }),
-    onMutate: (question) => {
-      setMessages((prev) => [...prev, { role: 'user', content: question }]);
-      setInput('');
-    },
-    onSuccess: (data) => {
+    const newMessage = {
+      id: messages.length + 1,
+      role: "user" as const,
+      content: inputValue,
+    };
+
+    setMessages([...messages, newMessage]);
+    setInputValue("");
+    setIsTyping(true);
+
+    // Simulate AI response
+    setTimeout(() => {
+      setIsTyping(false);
       setMessages((prev) => [
         ...prev,
-        { role: 'assistant', content: data.answer, sources: data.sourcesUsed },
+        {
+          id: prev.length + 1,
+          role: "assistant" as const,
+          content:
+            "I'm analyzing your data to answer that question. In a full implementation, I would provide personalized insights based on your actual transaction history!",
+        },
       ]);
-    },
-  });
+    }, 1500);
+  };
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, chat.isPending]);
-
-  const handleSend = (q?: string) => {
-    const question = q ?? input.trim();
-    if (!question) return;
-    chat.mutate(question);
+  const handleSuggestedQuestion = (question: string) => {
+    setInputValue(question);
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 h-[calc(100vh-8rem)] pb-20 lg:pb-0">
+    <div className="max-w-7xl mx-auto">
+          {/* Header */}
+          <div className="mb-8">
+            <h1 className="text-2xl font-bold text-white">AI Insights</h1>
+            <p className="text-zinc-400 mt-1">
+              Chat with AI about your finances and view weekly spending insights.
+            </p>
+          </div>
 
-      {/* Chat panel */}
-      <Card className="lg:col-span-3 flex flex-col overflow-hidden">
-        <div className="flex items-center gap-2 px-5 py-3.5 border-b border-border flex-shrink-0">
-          <Sparkles className="h-4 w-4 text-[var(--color-brand)]" />
-          <p className="text-sm font-semibold text-foreground">Ask AI about your finances</p>
-          <span className="ml-auto text-[10px] text-muted-foreground">Powered by Claude + RAG</span>
-        </div>
+          {/* Split Layout */}
+          <div className="grid lg:grid-cols-[58%_42%] gap-6">
+            {/* Chat Interface */}
+            <Card className="bg-zinc-900/50 border-white/10 backdrop-blur-sm flex flex-col h-[calc(100vh-200px)] min-h-[600px]">
+              <CardHeader className="border-b border-white/10">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-emerald-500/20">
+                    <Sparkles className="h-5 w-5 text-emerald-500" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-white">SpendWise AI</CardTitle>
+                    <p className="text-zinc-500 text-sm">
+                      Ask anything about your finances
+                    </p>
+                  </div>
+                </div>
+              </CardHeader>
 
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-full gap-4 py-8">
-              <div className="w-12 h-12 rounded-2xl bg-[var(--color-brand-muted)] flex items-center justify-center">
-                <Sparkles className="h-6 w-6 text-[var(--color-brand)]" />
-              </div>
-              <div className="text-center">
-                <p className="text-base font-semibold text-foreground mb-1">Ask anything about your spending</p>
-                <p className="text-sm text-muted-foreground">Your data stays private — only used to answer your questions</p>
-              </div>
-              <div className="flex flex-wrap justify-center gap-2 max-w-sm">
-                {SUGGESTED.map((q) => (
-                  <button
-                    key={q}
-                    onClick={() => handleSend(q)}
-                    className="text-xs text-muted-foreground bg-secondary hover:bg-secondary/80 px-3 py-2 rounded-xl transition-colors text-left"
+              {/* Messages */}
+              <CardContent className="flex-1 overflow-y-auto p-4 space-y-4">
+                {messages.map((message) => (
+                  <div
+                    key={message.id}
+                    className={cn(
+                      "flex gap-3",
+                      message.role === "user" && "flex-row-reverse"
+                    )}
                   >
-                    {q}
-                  </button>
+                    {message.role === "assistant" && (
+                      <Avatar className="h-8 w-8 shrink-0">
+                        <AvatarFallback className="bg-emerald-500/20 text-emerald-500 text-xs">
+                          SW
+                        </AvatarFallback>
+                      </Avatar>
+                    )}
+                    <div
+                      className={cn(
+                        "max-w-[80%] rounded-2xl px-4 py-3 text-sm",
+                        message.role === "assistant"
+                          ? "bg-zinc-800 text-white"
+                          : "bg-slate-700 text-white ml-auto"
+                      )}
+                    >
+                      <p className="whitespace-pre-wrap">{message.content}</p>
+                    </div>
+                  </div>
                 ))}
-              </div>
-            </div>
-          )}
 
-          {messages.map((msg, i) => (
-            <div key={i} className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              {msg.role === 'assistant' && (
-                <div className="w-7 h-7 rounded-full bg-[var(--color-brand-muted)] flex items-center justify-center flex-shrink-0">
-                  <Sparkles className="h-3.5 w-3.5 text-[var(--color-brand)]" />
-                </div>
-              )}
-              <div className={`max-w-[85%] ${msg.role === 'user' ? 'max-w-[75%]' : ''}`}>
-                <div
-                  className={`px-4 py-3 rounded-2xl text-sm leading-relaxed ${
-                    msg.role === 'user'
-                      ? 'bg-foreground text-background rounded-br-sm'
-                      : 'bg-secondary text-foreground rounded-bl-sm border border-border'
-                  }`}
-                >
-                  {msg.content}
-                </div>
-                {msg.role === 'assistant' && msg.sources !== undefined && (
-                  <p className="text-[10px] text-muted-foreground mt-1 px-1">
-                    Based on {msg.sources} transactions
-                  </p>
+                {/* Typing indicator */}
+                {isTyping && (
+                  <div className="flex gap-3">
+                    <Avatar className="h-8 w-8 shrink-0">
+                      <AvatarFallback className="bg-emerald-500/20 text-emerald-500 text-xs">
+                        SW
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="bg-zinc-800 rounded-2xl px-4 py-3">
+                      <div className="flex gap-1">
+                        <span className="w-2 h-2 bg-zinc-500 rounded-full animate-bounce" />
+                        <span
+                          className="w-2 h-2 bg-zinc-500 rounded-full animate-bounce"
+                          style={{ animationDelay: "0.1s" }}
+                        />
+                        <span
+                          className="w-2 h-2 bg-zinc-500 rounded-full animate-bounce"
+                          style={{ animationDelay: "0.2s" }}
+                        />
+                      </div>
+                    </div>
+                  </div>
                 )}
-              </div>
-            </div>
-          ))}
+              </CardContent>
 
-          {chat.isPending && (
-            <div className="flex gap-2">
-              <div className="w-7 h-7 rounded-full bg-[var(--color-brand-muted)] flex items-center justify-center flex-shrink-0">
-                <Sparkles className="h-3.5 w-3.5 text-[var(--color-brand)]" />
-              </div>
-              <div className="bg-secondary border border-border rounded-2xl rounded-bl-sm px-4 py-3">
-                <div className="flex gap-1 items-center h-4">
-                  {[0, 1, 2].map((i) => (
-                    <span key={i} className={`w-1.5 h-1.5 bg-muted-foreground rounded-full typing-dot`} />
+              {/* Suggested Questions */}
+              <div className="px-4 pb-2">
+                <div className="flex flex-wrap gap-2">
+                  {suggestedQuestions.map((question) => (
+                    <button
+                      key={question}
+                      onClick={() => handleSuggestedQuestion(question)}
+                      className="px-3 py-1.5 text-xs rounded-full border border-white/10 text-zinc-400 hover:text-white hover:border-emerald-500/50 transition-colors"
+                    >
+                      {question}
+                    </button>
                   ))}
                 </div>
               </div>
-            </div>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
 
-        {/* Input */}
-        <div className="p-3 border-t border-border flex-shrink-0">
-          {messages.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mb-2">
-              {SUGGESTED.slice(0, 2).map((q) => (
-                <button
-                  key={q}
-                  onClick={() => handleSend(q)}
-                  className="text-xs text-muted-foreground bg-secondary hover:bg-secondary/80 px-2.5 py-1 rounded-lg transition-colors"
+              {/* Input */}
+              <div className="p-4 border-t border-white/10">
+                <div className="flex gap-2">
+                  <Input
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                    placeholder="Ask about your spending..."
+                    className="bg-zinc-800 border-white/10 text-white placeholder:text-zinc-500"
+                  />
+                  <Button
+                    onClick={handleSend}
+                    disabled={!inputValue.trim()}
+                    className="bg-emerald-500 hover:bg-emerald-600 text-black"
+                  >
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </Card>
+
+            {/* Weekly Insights */}
+            <div className="space-y-4 overflow-y-auto max-h-[calc(100vh-200px)]">
+              <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                <Lightbulb className="h-5 w-5 text-emerald-500" />
+                Weekly Insights
+              </h2>
+
+              {weeklyInsights.map((insight, i) => (
+                <Card
+                  key={i}
+                  className="bg-zinc-900/50 border-white/10 backdrop-blur-sm"
                 >
-                  {q}
-                </button>
+                  <CardContent className="p-4 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-zinc-400 text-sm font-medium">
+                        {insight.week}
+                      </span>
+                      <span className="text-white font-bold">
+                        ₹{insight.totalSpend.toLocaleString()}
+                      </span>
+                    </div>
+
+                    {/* Category bar */}
+                    <div className="h-2 rounded-full overflow-hidden flex">
+                      {insight.categories.map((cat, j) => (
+                        <div
+                          key={j}
+                          className={cn(cat.color)}
+                          style={{ width: `${cat.percentage}%` }}
+                        />
+                      ))}
+                    </div>
+
+                    {/* Legend */}
+                    <div className="flex flex-wrap gap-3">
+                      {insight.categories.map((cat, j) => (
+                        <div key={j} className="flex items-center gap-1.5">
+                          <div
+                            className={cn("w-2 h-2 rounded-full", cat.color)}
+                          />
+                          <span className="text-zinc-500 text-xs">
+                            {cat.name} {cat.percentage}%
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Tip */}
+                    <div className="flex items-start gap-2 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                      <TrendingDown className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
+                      <p className="text-emerald-400 text-xs leading-relaxed">
+                        {insight.tip}
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
               ))}
             </div>
-          )}
-          <div className="flex gap-2 items-end">
-            <textarea
-              className="flex-1 resize-none bg-secondary border border-border rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)] min-h-[40px] max-h-32"
-              placeholder="Ask about your spending..."
-              rows={1}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
-              }}
-            />
-            <button
-              onClick={() => handleSend()}
-              disabled={!input.trim() || chat.isPending}
-              className="w-10 h-10 bg-[var(--color-brand)] hover:opacity-90 disabled:opacity-40 text-white rounded-xl flex items-center justify-center transition-opacity flex-shrink-0"
-            >
-              <ArrowUp className="h-4 w-4" />
-            </button>
           </div>
-        </div>
-      </Card>
-
-      {/* Recommendations panel */}
-      <div className="lg:col-span-2 overflow-y-auto space-y-3">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">
-          AI Recommendations
-        </p>
-
-        {isLoading ? (
-          Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-32 rounded-xl" />)
-        ) : !recommendations ? (
-          <Card className="p-5 border-dashed text-center">
-            <Sparkles className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
-            <p className="text-sm text-muted-foreground">Upload transactions to unlock AI recommendations</p>
-          </Card>
-        ) : (
-          <>
-            {/* Savings summary */}
-            <Card className="p-4 bg-[var(--color-success-muted)] border-[var(--color-success)]/20">
-              <div className="flex items-center gap-2 mb-1">
-                <Sparkles className="h-4 w-4 text-[var(--color-success)]" />
-                <p className="text-xs font-semibold text-[var(--color-success)] uppercase tracking-wider">
-                  Potential Savings
-                </p>
-              </div>
-              <p className="text-2xl font-bold font-mono text-foreground">
-                {formatCurrency(recommendations.estimatedMonthlySavings)}
-              </p>
-              <p className="text-xs text-muted-foreground">/month if you act on all recommendations</p>
-            </Card>
-
-            {/* Top leaks */}
-            {recommendations.topLeaks.map((leak, i) => (
-              <Card key={i} className="p-4 border-l-4 border-l-rose-400">
-                <div className="flex items-start justify-between gap-2 mb-1">
-                  <p className="text-sm font-semibold text-foreground">{leak.merchant}</p>
-                  <Amount value={leak.estimatedMonthlySavings} size="sm" positive />
-                </div>
-                <p className="text-xs text-muted-foreground leading-relaxed">{leak.reason}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">/mo potential saving</p>
-              </Card>
-            ))}
-
-            {/* Action checklist */}
-            <Card className="p-4">
-              <div className="flex items-center gap-1.5 mb-3">
-                <Sparkles className="h-3.5 w-3.5 text-[var(--color-brand)]" />
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Action Plan</p>
-              </div>
-              <div className="space-y-2">
-                {recommendations.actionChecklist.map((action, i) => (
-                  <div key={i} className="flex items-start gap-2">
-                    <span className="w-5 h-5 rounded-full bg-[var(--color-brand-muted)] text-[var(--color-brand)] text-[10px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
-                      {i + 1}
-                    </span>
-                    <p className="text-xs text-muted-foreground leading-relaxed">{action}</p>
-                  </div>
-                ))}
-              </div>
-            </Card>
-
-            {recommendations.uncertaintyNotes && (
-              <p className="text-xs text-muted-foreground px-1 italic">{recommendations.uncertaintyNotes}</p>
-            )}
-          </>
-        )}
-      </div>
     </div>
   );
 }

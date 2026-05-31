@@ -1,83 +1,137 @@
-'use client';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import {
-  LayoutDashboard, ArrowLeftRight, RefreshCw,
-  Sparkles, Settings, LogOut, TrendingUp,
-} from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { useAuthStore } from '@/store';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+"use client";
 
-const NAV = [
-  { href: '/dashboard',      icon: LayoutDashboard, label: 'Dashboard' },
-  { href: '/transactions',   icon: ArrowLeftRight,  label: 'Transactions' },
-  { href: '/subscriptions',  icon: RefreshCw,       label: 'Subscriptions' },
-  { href: '/insights',       icon: Sparkles,        label: 'AI Insights', badge: true },
-  { href: '/settings',       icon: Settings,        label: 'Settings' },
+import { useState } from "react";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import {
+  TrendingUp,
+  LayoutDashboard,
+  CreditCard,
+  RefreshCw,
+  Lightbulb,
+  Settings2,
+  LogOut,
+  Menu,
+  X,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { useAuthStore } from "@/store";
+import { api } from "@/lib/api";
+
+const navItems = [
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/transactions", label: "Transactions", icon: CreditCard },
+  { href: "/subscriptions", label: "Subscriptions", icon: RefreshCw },
+  { href: "/insights", label: "Insights", icon: Lightbulb },
+  { href: "/settings", label: "Settings", icon: Settings2 },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const [mobileOpen, setMobileOpen] = useState(false);
   const { user, logout } = useAuthStore();
 
+  const handleLogout = async () => {
+    try {
+      await api.post('/auth/logout');
+    } catch {
+      // ignore errors on logout
+    }
+    logout();
+    router.push('/login');
+  };
+
+  const displayName = user?.email?.split('@')[0] ?? 'User';
+  const initials = displayName.slice(0, 2).toUpperCase();
+
   return (
-    <aside className="fixed left-0 top-0 h-screen w-60 bg-card border-r border-border flex-col hidden lg:flex z-30">
-      {/* Logo */}
-      <div className="px-6 py-5 flex items-center gap-2 border-b border-border">
-        <TrendingUp className="h-5 w-5 text-[var(--color-brand)]" />
-        <span className="text-base font-bold text-foreground tracking-tight">SpendWise</span>
-        <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-brand)] mt-0.5" />
-      </div>
+    <>
+      {/* Mobile toggle button */}
+      <Button
+        variant="ghost"
+        size="icon"
+        className="fixed top-4 left-4 z-50 md:hidden"
+        onClick={() => setMobileOpen(!mobileOpen)}
+      >
+        {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+      </Button>
 
-      {/* Nav */}
-      <nav className="flex-1 px-3 py-4 space-y-0.5">
-        {NAV.map(({ href, icon: Icon, label, badge }) => {
-          const active = pathname === href || pathname.startsWith(href + '/');
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={cn(
-                'group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
-                active
-                  ? 'bg-[var(--color-brand-muted)] text-[var(--color-brand)] font-semibold'
-                  : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
-              )}
-            >
-              {active && (
-                <span className="absolute left-0 top-1 bottom-1 w-0.5 bg-[var(--color-brand)] rounded-r-full" />
-              )}
-              <Icon className={cn('h-4 w-4 flex-shrink-0', active ? 'text-[var(--color-brand)]' : '')} />
-              <span className="flex-1">{label}</span>
-              {badge && (
-                <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-brand)]" />
-              )}
-            </Link>
-          );
-        })}
-      </nav>
+      {/* Mobile overlay */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
 
-      {/* User */}
-      <div className="px-3 py-4 border-t border-border">
-        <div className="flex items-center gap-3 px-3 py-2">
-          <Avatar className="h-8 w-8">
-            <AvatarFallback className="text-xs bg-[var(--color-brand-muted)] text-[var(--color-brand)]">
-              {user?.email?.[0]?.toUpperCase() ?? 'U'}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-foreground truncate">{user?.email?.split('@')[0] ?? 'User'}</p>
-            <p className="text-xs text-muted-foreground truncate">{user?.email ?? ''}</p>
+      {/* Sidebar */}
+      <aside
+        className={cn(
+          "fixed top-0 left-0 z-40 h-screen w-[240px] flex flex-col border-r border-white/10 bg-zinc-950/80 backdrop-blur-xl transition-transform duration-300",
+          "md:translate-x-0",
+          mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+        )}
+      >
+        {/* Logo */}
+        <div className="flex items-center gap-2 px-6 py-6 border-b border-white/10">
+          <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-emerald-500/20">
+            <TrendingUp className="h-5 w-5 text-emerald-500" />
           </div>
-          <button
-            onClick={logout}
-            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+          <span className="text-lg font-semibold text-white">SpendWise</span>
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex-1 px-3 py-4 space-y-1">
+          {navItems.map((item) => {
+            const isActive = pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setMobileOpen(false)}
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all",
+                  isActive
+                    ? "bg-emerald-500/20 text-emerald-500"
+                    : "text-zinc-400 hover:text-white hover:bg-white/5"
+                )}
+              >
+                <item.icon className="h-5 w-5" />
+                <span className="md:inline">{item.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* User section */}
+        <div className="p-4 border-t border-white/10">
+          <div className="flex items-center gap-3 px-2 py-2">
+            <Avatar className="h-9 w-9">
+              <AvatarImage src="" alt={displayName} />
+              <AvatarFallback className="bg-emerald-500/20 text-emerald-500 text-sm">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-white truncate">
+                {displayName}
+              </p>
+              <p className="text-xs text-zinc-500 truncate">{user?.email}</p>
+            </div>
+          </div>
+          <Button
+            variant="ghost"
+            onClick={handleLogout}
+            className="w-full justify-start gap-3 mt-2 text-zinc-400 hover:text-white hover:bg-white/5"
           >
             <LogOut className="h-4 w-4" />
-          </button>
+            <span>Logout</span>
+          </Button>
         </div>
-      </div>
-    </aside>
+      </aside>
+    </>
   );
 }
