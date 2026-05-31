@@ -18,16 +18,16 @@ import { useUIStore } from "@/store";
 
 const CATEGORY_COLORS: Record<string, string> = {
   food: "bg-orange-500", shopping: "bg-blue-500", utilities: "bg-yellow-500",
-  transport: "bg-purple-500", entertainment: "bg-pink-500", health: "bg-red-500",
+  travel: "bg-purple-500", entertainment: "bg-pink-500", health: "bg-red-500",
   subscriptions: "bg-cyan-500", income: "bg-emerald-500", other: "bg-zinc-500",
 };
 const CHART_COLORS: Record<string, string> = {
   food: "#f97316", shopping: "#3b82f6", utilities: "#eab308",
-  transport: "#8b5cf6", entertainment: "#ec4899", health: "#ef4444",
+  travel: "#8b5cf6", entertainment: "#ec4899", health: "#ef4444",
   subscriptions: "#06b6d4", other: "#6b7280",
 };
 const CATEGORY_LABELS: Record<string, string> = {
-  food: "Food", shopping: "Shopping", utilities: "Bills", transport: "Transport",
+  food: "Food", shopping: "Shopping", utilities: "Bills", travel: "Travel",
   entertainment: "Entertainment", health: "Health", subscriptions: "Subscriptions",
   income: "Income", other: "Other",
 };

@@ -19,7 +19,7 @@ import { useUIStore } from "@/store";
 const CATEGORIES = [
   { value: "food", label: "🍔 Food & Dining" },
   { value: "shopping", label: "🛒 Shopping" },
-  { value: "transport", label: "🚗 Transport" },
+  { value: "travel", label: "🚗 Transport" },
   { value: "utilities", label: "💡 Bills & Utilities" },
   { value: "entertainment", label: "🎬 Entertainment" },
   { value: "health", label: "🏥 Health" },

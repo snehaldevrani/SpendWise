@@ -12,7 +12,7 @@ import { api } from '@/lib/api';
 import { useUIStore } from '@/store';
 import type { CsvImportResult } from '@/lib/types';
 
-type UploadState = 'idle' | 'selected' | 'uploading' | 'done' | 'error';
+type UploadState = 'idle' | 'selected' | 'confirm' | 'uploading' | 'done' | 'error';
 
 const ACCEPTED = '.csv,.xlsx,.xls';
 
@@ -203,10 +203,31 @@ export function UploadDialog() {
               )}
             </div>
 
-            <Button onClick={upload} className="w-full bg-foreground text-background hover:bg-foreground/85">
+            <Button onClick={() => setState('confirm')} className="w-full bg-foreground text-background hover:bg-foreground/85">
               <UploadCloud className="h-4 w-4 mr-2" />
               Import {file.name}
             </Button>
+          </div>
+        )}
+
+        {state === 'confirm' && file && (
+          <div className="space-y-4 py-2">
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-400">
+              <p className="font-semibold mb-1">⚠ This will replace all existing data</p>
+              <p className="text-amber-400/80">
+                Uploading <span className="font-medium text-amber-300">{file.name}</span> will
+                delete all your current transactions and re-run subscription detection.
+                This cannot be undone.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1 border-white/10" onClick={() => setState('selected')}>
+                Go back
+              </Button>
+              <Button onClick={upload} className="flex-1 bg-amber-500 hover:bg-amber-600 text-black font-semibold">
+                Confirm &amp; Replace
+              </Button>
+            </div>
           </div>
         )}
 

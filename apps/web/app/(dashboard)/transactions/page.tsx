@@ -19,7 +19,7 @@ const CATEGORIES = [
   { value: "all", label: "All Categories" },
   { value: "food", label: "ðŸ” Food & Dining" },
   { value: "shopping", label: "ðŸ›’ Shopping" },
-  { value: "transport", label: "ðŸš— Transport" },
+  { value: "travel", label: "ðŸš— Transport" },
   { value: "utilities", label: "ðŸ’¡ Bills & Utilities" },
   { value: "entertainment", label: "ðŸŽ¬ Entertainment" },
   { value: "income", label: "ðŸ’° Income" },
@@ -31,7 +31,7 @@ const CATEGORIES = [
 const CAT_META: Record<string, { emoji: string; label: string; color: string }> = {
   food: { emoji: "ðŸ”", label: "Food & Dining", color: "bg-orange-500/20 text-orange-400" },
   shopping: { emoji: "ðŸ›’", label: "Shopping", color: "bg-blue-500/20 text-blue-400" },
-  transport: { emoji: "ðŸš—", label: "Transport", color: "bg-purple-500/20 text-purple-400" },
+  travel: { emoji: "ðŸš—", label: "Travel", color: "bg-purple-500/20 text-purple-400" },
   utilities: { emoji: "ðŸ’¡", label: "Bills & Utilities", color: "bg-yellow-500/20 text-yellow-400" },
   entertainment: { emoji: "ðŸŽ¬", label: "Entertainment", color: "bg-pink-500/20 text-pink-400" },
   income: { emoji: "ðŸ’°", label: "Income", color: "bg-emerald-500/20 text-emerald-400" },

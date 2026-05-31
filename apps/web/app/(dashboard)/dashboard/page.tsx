@@ -35,16 +35,16 @@ import { useAuthStore, useUIStore } from "@/store";
 
 const CATEGORY_COLORS: Record<string, string> = {
   food: "#10b981", shopping: "#3b82f6", utilities: "#f59e0b",
-  transport: "#8b5cf6", entertainment: "#ec4899", health: "#ef4444",
+  travel: "#8b5cf6", entertainment: "#ec4899", health: "#ef4444",
   subscriptions: "#06b6d4", income: "#84cc16", other: "#6b7280",
 };
 const CATEGORY_LABELS: Record<string, string> = {
   food: "Food & Dining", shopping: "Shopping", utilities: "Bills & Utilities",
-  transport: "Transport", entertainment: "Entertainment", health: "Health",
+  travel: "Travel", entertainment: "Entertainment", health: "Health",
   subscriptions: "Subscriptions", income: "Income", other: "Others",
 };
 const CATEGORY_EMOJI: Record<string, string> = {
-  food: "ÃƒÂ°Ã…Â¸Ã‚ÂÃ¢â‚¬Â", shopping: "ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂºÃ¢â‚¬â„¢", utilities: "ÃƒÂ°Ã…Â¸Ã¢â‚¬â„¢Ã‚Â¡", transport: "ÃƒÂ°Ã…Â¸Ã…Â¡Ã¢â‚¬â€",
+  food: "ÃƒÂ°Ã…Â¸Ã‚ÂÃ¢â‚¬Â", shopping: "ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂºÃ¢â‚¬â„¢", utilities: "ÃƒÂ°Ã…Â¸Ã¢â‚¬â„¢Ã‚Â¡", travel: "ÃƒÂ°Ã…Â¸Ã…Â¡Ã¢â‚¬â€",
   entertainment: "ÃƒÂ°Ã…Â¸Ã…Â½Ã‚Â¬", health: "ÃƒÂ°Ã…Â¸Ã‚ÂÃ‚Â¥", subscriptions: "ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ¢â‚¬Å¾", income: "ÃƒÂ°Ã…Â¸Ã¢â‚¬â„¢Ã‚Â°", other: "ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã‚Â¦",
 };
 

@@ -44,24 +44,24 @@ export class DigestService {
       if (!insight) return; // no data yet
 
       const summary = insight.summaryJson as {
-        totalSpend?: number;
-        totalIncome?: number;
-        byCategory?: Record<string, number>;
+        totalSpent?: number;
+        totalCredits?: number;
+        categoryBreakdown?: Array<{ category: string; total: number }>;
         topMerchants?: Array<{ merchant: string; total: number }>;
       };
 
-      const totalSpend = summary.totalSpend ?? 0;
-      const totalIncome = summary.totalIncome ?? 0;
-      const byCategory = summary.byCategory ?? {};
+      const totalSpend = summary.totalSpent ?? 0;
+      const totalIncome = summary.totalCredits ?? 0;
+      const categoryBreakdown = summary.categoryBreakdown ?? [];
       const topMerchants = summary.topMerchants ?? [];
 
       // Top 3 categories by spend
-      const topCats = Object.entries(byCategory)
-        .sort(([, a], [, b]) => b - a)
+      const topCats = [...categoryBreakdown]
+        .sort((a, b) => b.total - a.total)
         .slice(0, 3);
 
       const catRows = topCats
-        .map(([cat, amt]) => `<li><strong>${cat}</strong> — ₹${Math.round(amt).toLocaleString('en-IN')}</li>`)
+        .map((c) => `<li><strong>${c.category}</strong> — ₹${Math.round(c.total).toLocaleString('en-IN')}</li>`)
         .join('');
 
       const merchantRows = topMerchants
