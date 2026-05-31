@@ -14,6 +14,7 @@ const mockPrisma = {
   refreshToken: {
     create: jest.fn(),
     findUnique: jest.fn(),
+    findMany: jest.fn(),
     delete: jest.fn(),
     deleteMany: jest.fn(),
   },
@@ -21,6 +22,7 @@ const mockPrisma = {
 
 const mockJwt = {
   sign: jest.fn().mockReturnValue('mock-token'),
+  verify: jest.fn(),
 };
 
 const mockConfig = {
@@ -119,46 +121,53 @@ describe('AuthService', () => {
 
   describe('refresh', () => {
     it('issues new tokens for a valid refresh token', async () => {
-      const futureDate = new Date();
-      futureDate.setDate(futureDate.getDate() + 7);
+      const rawToken = 'valid-refresh-jwt';
+      const tokenHash = await bcrypt.hash(rawToken, 10);
 
-      mockPrisma.refreshToken.findUnique.mockResolvedValue({
-        token: 'valid-token',
-        userId: 'user-1',
-        expiresAt: futureDate,
-      });
+      mockJwt.verify.mockReturnValue({ sub: 'user-1', email: 'user@test.com' });
+      mockPrisma.refreshToken.findMany.mockResolvedValue([
+        { id: 'rt-1', tokenHash },
+      ]);
       mockPrisma.refreshToken.delete.mockResolvedValue({});
       mockPrisma.user.findUnique.mockResolvedValue({ id: 'user-1', email: 'user@test.com' });
       mockPrisma.refreshToken.create.mockResolvedValue({});
 
-      const result = await service.refresh('valid-token');
+      const result = await service.refresh(rawToken);
       expect(result).toHaveProperty('accessToken');
+      expect(mockPrisma.refreshToken.delete).toHaveBeenCalledWith({ where: { id: 'rt-1' } });
     });
 
-    it('throws UnauthorizedException for expired refresh token', async () => {
-      const pastDate = new Date('2020-01-01');
-      mockPrisma.refreshToken.findUnique.mockResolvedValue({
-        token: 'expired-token',
-        userId: 'user-1',
-        expiresAt: pastDate,
-      });
-
-      await expect(service.refresh('expired-token')).rejects.toThrow(UnauthorizedException);
+    it('throws UnauthorizedException for an expired/invalid JWT', async () => {
+      mockJwt.verify.mockImplementation(() => { throw new Error('jwt expired'); });
+      await expect(service.refresh('expired-jwt')).rejects.toThrow(UnauthorizedException);
     });
 
-    it('throws UnauthorizedException for unknown refresh token', async () => {
-      mockPrisma.refreshToken.findUnique.mockResolvedValue(null);
-      await expect(service.refresh('unknown')).rejects.toThrow(UnauthorizedException);
+    it('throws UnauthorizedException when no hash matches', async () => {
+      mockJwt.verify.mockReturnValue({ sub: 'user-1', email: 'user@test.com' });
+      mockPrisma.refreshToken.findMany.mockResolvedValue([]);
+      await expect(service.refresh('unknown-token')).rejects.toThrow(UnauthorizedException);
     });
   });
 
   describe('logout', () => {
-    it('deletes the refresh token', async () => {
-      mockPrisma.refreshToken.deleteMany.mockResolvedValue({ count: 1 });
-      await service.logout('some-token');
-      expect(mockPrisma.refreshToken.deleteMany).toHaveBeenCalledWith({
-        where: { token: 'some-token' },
-      });
+    it('deletes the matching refresh token by id', async () => {
+      const rawToken = 'some-refresh-jwt';
+      const tokenHash = await bcrypt.hash(rawToken, 10);
+
+      mockJwt.verify.mockReturnValue({ sub: 'user-1', email: 'user@test.com' });
+      mockPrisma.refreshToken.findMany.mockResolvedValue([
+        { id: 'rt-42', tokenHash },
+      ]);
+      mockPrisma.refreshToken.delete.mockResolvedValue({});
+
+      await service.logout(rawToken);
+      expect(mockPrisma.refreshToken.delete).toHaveBeenCalledWith({ where: { id: 'rt-42' } });
+    });
+
+    it('does nothing when JWT is invalid', async () => {
+      mockJwt.verify.mockImplementation(() => { throw new Error('invalid'); });
+      await service.logout('garbage');
+      expect(mockPrisma.refreshToken.findMany).not.toHaveBeenCalled();
     });
   });
 });
