@@ -1,5 +1,8 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
+# v0.dev source snapshot — kept in git history but not needed locally
+/spend-wise-app-build
+
 # dependencies
 /node_modules
 /.pnp

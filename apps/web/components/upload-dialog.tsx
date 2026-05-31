@@ -1,7 +1,7 @@
 'use client';
 import { useState, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { UploadCloud, FileText, CheckCircle, AlertCircle, Loader2, X, Lock } from 'lucide-react';
+import { UploadCloud, FileText, CheckCircle, AlertCircle, Loader2, X, Lock, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import confetti from 'canvas-confetti';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -16,12 +16,23 @@ type UploadState = 'idle' | 'selected' | 'uploading' | 'done' | 'error';
 
 const ACCEPTED = '.csv,.xlsx,.xls';
 
+const BANKS = [
+  { id: 'hdfc',  label: 'HDFC Bank',   hint: 'Customer ID (printed on statement)' },
+  { id: 'icici', label: 'ICICI Bank',  hint: 'First 4 letters of name (uppercase) + DOB as DDMM · e.g. SNEJ0512' },
+  { id: 'sbi',   label: 'SBI',         hint: 'Account number + DOB as DDMMYYYY' },
+  { id: 'axis',  label: 'Axis Bank',   hint: 'DOB as DDMMYYYY · e.g. 15061998' },
+  { id: 'kotak', label: 'Kotak Bank',  hint: 'DOB as DDMMYYYY' },
+  { id: 'other', label: 'Other / Unknown', hint: 'Try your date of birth (DDMMYYYY) or mobile number' },
+];
+
 export function UploadDialog() {
   const { uploadDialogOpen, setUploadDialog } = useUIStore();
   const queryClient = useQueryClient();
   const [state, setState] = useState<UploadState>('idle');
   const [file, setFile] = useState<File | null>(null);
   const [password, setPassword] = useState('');
+  const [selectedBank, setSelectedBank] = useState('');
+  const [showBankPicker, setShowBankPicker] = useState(false);
   const [result, setResult] = useState<CsvImportResult | null>(null);
   const [progress, setProgress] = useState(0);
   const [dragOver, setDragOver] = useState(false);
@@ -86,6 +97,8 @@ export function UploadDialog() {
     setState('idle');
     setFile(null);
     setPassword('');
+    setSelectedBank('');
+    setShowBankPicker(false);
     setResult(null);
     setProgress(0);
     setErrorMsg('');
@@ -95,8 +108,6 @@ export function UploadDialog() {
     setUploadDialog(false);
     setTimeout(reset, 300);
   };
-
-  const needsPassword = file && /\.(xlsx?|xls)$/i.test(file.name);
 
   return (
     <Dialog open={uploadDialogOpen} onOpenChange={close}>
@@ -127,6 +138,7 @@ export function UploadDialog() {
 
         {state === 'selected' && file && (
           <div className="space-y-4">
+            {/* File row */}
             <div className="flex items-center gap-3 p-3 bg-secondary rounded-xl">
               <FileText className="h-5 w-5 text-[var(--color-brand)] flex-shrink-0" />
               <div className="flex-1 min-w-0">
@@ -138,29 +150,57 @@ export function UploadDialog() {
               </button>
             </div>
 
-            {needsPassword && (
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <Lock className="h-3 w-3" />
-                  <span>Password (if file is protected)</span>
-                </div>
-                <Input
-                  type="password"
-                  placeholder="e.g. first 4 letters of name + DOB (DDMM)"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="h-9 text-sm"
-                />
-                <p className="text-[10px] text-muted-foreground">
-                  HDFC: Customer ID · ICICI: NAME(4) + DOB(DDMM) · SBI: AccNo + DOB · Axis: DOB(DDMMYYYY)
-                </p>
+            {/* Bank selector */}
+            <div className="space-y-1.5">
+              <p className="text-xs font-medium text-muted-foreground">Your bank</p>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowBankPicker((v) => !v)}
+                  className="w-full flex items-center justify-between px-3 h-9 rounded-lg border border-border bg-background text-sm hover:bg-secondary transition-colors"
+                >
+                  <span className={selectedBank ? 'text-foreground' : 'text-muted-foreground'}>
+                    {BANKS.find((b) => b.id === selectedBank)?.label ?? 'Select bank…'}
+                  </span>
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                </button>
+                {showBankPicker && (
+                  <div className="absolute z-10 mt-1 w-full rounded-lg border border-border bg-popover shadow-md overflow-hidden">
+                    {BANKS.map((b) => (
+                      <button
+                        key={b.id}
+                        type="button"
+                        onClick={() => { setSelectedBank(b.id); setShowBankPicker(false); }}
+                        className={`w-full text-left px-3 py-2 text-sm hover:bg-secondary transition-colors ${selectedBank === b.id ? 'text-[var(--color-brand)] font-medium' : 'text-foreground'}`}
+                      >
+                        {b.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
+            </div>
 
-            <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
-              <p className="text-xs text-amber-800 dark:text-amber-400 font-medium">
-                This will replace your existing data with the new file.
-              </p>
+            {/* Password field — always visible */}
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <Lock className="h-3 w-3" />
+                <span>Password <span className="font-normal">(if statement is protected)</span></span>
+              </div>
+              <Input
+                type="password"
+                placeholder={selectedBank
+                  ? (BANKS.find((b) => b.id === selectedBank)?.hint ?? 'Enter password')
+                  : 'Select your bank above for a hint'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="h-9 text-sm"
+              />
+              {selectedBank && (
+                <p className="text-[10px] text-muted-foreground">
+                  {BANKS.find((b) => b.id === selectedBank)?.hint}
+                </p>
+              )}
             </div>
 
             <Button onClick={upload} className="w-full bg-foreground text-background hover:bg-foreground/85">

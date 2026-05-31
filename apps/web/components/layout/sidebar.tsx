@@ -13,11 +13,12 @@ import {
   LogOut,
   Menu,
   X,
+  Upload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { useAuthStore } from "@/store";
+import { useAuthStore, useUIStore } from "@/store";
 import { api } from "@/lib/api";
 
 const navItems = [
@@ -33,6 +34,7 @@ export function Sidebar() {
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const { user, logout } = useAuthStore();
+  const { setUploadDialog } = useUIStore();
 
   const handleLogout = async () => {
     try {
@@ -105,6 +107,17 @@ export function Sidebar() {
             );
           })}
         </nav>
+
+        {/* Upload button */}
+        <div className="px-3 pb-4">
+          <Button
+            onClick={() => { setUploadDialog(true); setMobileOpen(false); }}
+            className="w-full bg-emerald-500 hover:bg-emerald-600 text-white gap-2 font-medium"
+          >
+            <Upload className="h-4 w-4" />
+            Upload Statement
+          </Button>
+        </div>
 
         {/* User section */}
         <div className="p-4 border-t border-white/10">
