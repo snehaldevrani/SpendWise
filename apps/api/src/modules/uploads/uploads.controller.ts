@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Post,
@@ -9,6 +10,14 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { UploadsService } from './uploads.service';
 import { CurrentUser, AuthUser } from '../auth/decorators/current-user.decorator';
+
+const ALLOWED_MIMETYPES = new Set([
+  'text/csv',
+  'text/plain',                                                          // some banks label CSV as text/plain
+  'application/vnd.ms-excel',                                           // .xls
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',  // .xlsx
+  'application/octet-stream',                                           // fallback for some browsers on .csv
+]);
 
 @ApiTags('uploads')
 @ApiBearerAuth()
@@ -21,6 +30,13 @@ export class UploadsController {
   @UseInterceptors(
     FileInterceptor('file', {
       limits: { fileSize: 10 * 1024 * 1024 },
+      fileFilter: (_req, file, cb) => {
+        if (ALLOWED_MIMETYPES.has(file.mimetype)) {
+          cb(null, true);
+        } else {
+          cb(new BadRequestException(`Unsupported file type: ${file.mimetype}. Supported formats: CSV, XLS, XLSX`), false);
+        }
+      },
     }),
   )
   importCsv(

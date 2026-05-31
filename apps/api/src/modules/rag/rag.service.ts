@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 
 const TOP_K = 8;
@@ -51,11 +52,10 @@ export class RagService {
         const embedding = embeddings[i];
         if (!embedding) continue;
 
-        await this.prisma.$executeRawUnsafe(
-          `UPDATE transactions SET embedding = $1::vector WHERE id = $2`,
-          `[${embedding.join(',')}]`,
-          txns[i].id,
-        );
+        // Use Prisma tagged template ($executeRaw) — parameters are bound, not interpolated.
+        // The embedding array is serialised to a string first, then passed as a typed $1 parameter.
+        const vectorLiteral = `[${embedding.join(',')}]`;
+        await this.prisma.$executeRaw`UPDATE transactions SET embedding = ${vectorLiteral}::vector WHERE id = ${txns[i].id}::uuid`;
       }
     } catch (err) {
       this.logger.error('Failed to embed transactions', err);
@@ -63,10 +63,9 @@ export class RagService {
   }
 
   async embedAllForUser(userId: string): Promise<void> {
-    const txns = await this.prisma.$queryRawUnsafe<Array<{ id: string }>>(
-      `SELECT id FROM transactions WHERE user_id = $1 AND embedding IS NULL`,
-      userId,
-    );
+    const txns = await this.prisma.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM transactions WHERE user_id = ${userId}::uuid AND embedding IS NULL
+    `;
     if (txns.length === 0) return;
     const ids = txns.map((t) => t.id);
     for (let i = 0; i < ids.length; i += 50) {
@@ -86,20 +85,17 @@ export class RagService {
 
     if (queryEmbedding.length !== EMBEDDING_DIMS) return [];
 
-    const vectorStr = `[${queryEmbedding.join(',')}]`;
+    const vectorLiteral = `[${queryEmbedding.join(',')}]`;
 
-    const results = await this.prisma.$queryRawUnsafe<
+    const results = await this.prisma.$queryRaw<
       Array<{ merchant: string; category: string; amount: number; date: Date; type: string }>
-    >(
-      `SELECT merchant, category, amount::float, date, type
-       FROM transactions
-       WHERE user_id = $1 AND embedding IS NOT NULL
-       ORDER BY embedding <=> $2::vector
-       LIMIT $3`,
-      userId,
-      vectorStr,
-      topK,
-    );
+    >`
+      SELECT merchant, category, amount::float, date, type
+      FROM transactions
+      WHERE user_id = ${userId}::uuid AND embedding IS NOT NULL
+      ORDER BY embedding <=> ${vectorLiteral}::vector
+      LIMIT ${Prisma.raw(String(topK))}
+    `;
 
     return results.map(
       (r) =>

@@ -14,8 +14,14 @@ import { api } from '@/lib/api';
 import { useAuthStore } from '@/store';
 
 const schema = z.object({
-  email: z.string().email('Enter a valid email'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
+  email: z
+    .string()
+    .email('Enter a valid email address')
+    .regex(/\.[a-zA-Z]{2,}$/, 'Enter a valid email address (e.g. you@gmail.com)'),
+  password: z
+    .string()
+    .min(8, 'Password must be at least 8 characters')
+    .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/, 'Must contain uppercase, lowercase, and a number'),
   confirm: z.string(),
 }).refine((d) => d.password === d.confirm, { message: "Passwords don't match", path: ['confirm'] });
 type FormData = z.infer<typeof schema>;
@@ -86,7 +92,7 @@ export default function SignupPage() {
             <div>
               <Label htmlFor="password" className="text-sm font-medium mb-1.5 block">Password</Label>
               <div className="relative">
-                <Input id="password" type={showPw ? 'text' : 'password'} placeholder="Min 8 characters" className={`h-11 pr-10 ${errors.password ? 'border-destructive' : ''}`} {...register('password')} />
+                <Input id="password" type={showPw ? 'text' : 'password'} placeholder="Min 8 chars, uppercase &amp; number" className={`h-11 pr-10 ${errors.password ? 'border-destructive' : ''}`} {...register('password')} />
                 <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
                   {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>

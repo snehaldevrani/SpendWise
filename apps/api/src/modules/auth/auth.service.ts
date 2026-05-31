@@ -42,21 +42,66 @@ export class AuthService {
   }
 
   async refresh(token: string): Promise<AuthTokens> {
-    const stored = await this.prisma.refreshToken.findUnique({ where: { token } });
-    if (!stored || stored.expiresAt < new Date()) {
+    // Load all non-expired refresh tokens for the userId encoded in the JWT
+    // then bcrypt.compare each until we find a match — avoids storing raw tokens
+    let userId: string;
+    try {
+      const payload = this.jwt.verify<JwtPayload>(token, {
+        secret: this.config.get('JWT_REFRESH_SECRET'),
+      });
+      userId = payload.sub;
+    } catch {
       throw new UnauthorizedException('Refresh token invalid or expired');
     }
 
-    await this.prisma.refreshToken.delete({ where: { token } });
+    const candidates = await this.prisma.refreshToken.findMany({
+      where: { userId, expiresAt: { gt: new Date() } },
+    });
 
-    const user = await this.prisma.user.findUnique({ where: { id: stored.userId } });
+    let matchedId: string | null = null;
+    for (const candidate of candidates) {
+      if (await bcrypt.compare(token, candidate.tokenHash)) {
+        matchedId = candidate.id;
+        break;
+      }
+    }
+
+    if (!matchedId) throw new UnauthorizedException('Refresh token invalid or expired');
+
+    // Atomic consume — delete the matched row
+    await this.prisma.refreshToken.delete({ where: { id: matchedId } });
+
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
 
     return this.issueTokens(user.id, user.email);
   }
 
   async logout(token: string): Promise<void> {
-    await this.prisma.refreshToken.deleteMany({ where: { token } });
+    // Decode userId from token (don't throw if token is already invalid)
+    let userId: string | null = null;
+    try {
+      const payload = this.jwt.verify<JwtPayload>(token, {
+        secret: this.config.get('JWT_REFRESH_SECRET'),
+      });
+      userId = payload.sub;
+    } catch {
+      return; // Nothing to revoke
+    }
+
+    if (!userId) return;
+
+    // Find all candidates and compare; delete the matching one
+    const candidates = await this.prisma.refreshToken.findMany({
+      where: { userId },
+    });
+
+    for (const candidate of candidates) {
+      if (await bcrypt.compare(token, candidate.tokenHash)) {
+        await this.prisma.refreshToken.delete({ where: { id: candidate.id } });
+        break;
+      }
+    }
   }
 
   private async issueTokens(userId: string, email: string): Promise<AuthTokens> {
@@ -67,16 +112,19 @@ export class AuthService {
       expiresIn: this.config.get('JWT_EXPIRES_IN'),
     });
 
+    // Refresh token is a signed JWT (allows userId extraction without a DB lookup),
+    // but we only store a bcrypt hash — a DB breach cannot be used to hijack sessions.
     const refreshToken = this.jwt.sign(payload, {
       secret: this.config.get('JWT_REFRESH_SECRET'),
       expiresIn: this.config.get('JWT_REFRESH_EXPIRES_IN'),
     });
+    const tokenHash = await bcrypt.hash(refreshToken, 10);
 
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
 
     await this.prisma.refreshToken.create({
-      data: { token: refreshToken, userId, expiresAt },
+      data: { tokenHash, userId, expiresAt },
     });
 
     return { accessToken, refreshToken };

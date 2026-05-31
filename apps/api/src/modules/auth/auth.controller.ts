@@ -1,11 +1,15 @@
 import { Controller, HttpCode, HttpStatus, Post, Body, Req, Res, UnauthorizedException } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { AuthTokens } from '@spendwise/shared-types';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
 import { Public } from './decorators/public.decorator';
+
+// Strict limit for auth endpoints: 5 requests per 15 minutes
+const AUTH_THROTTLE = { default: { limit: 5, ttl: 900_000 } };
 
 const ACCESS_TOKEN_TTL_MS = 15 * 60 * 1000;        // 15 minutes
 const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -16,6 +20,7 @@ export class AuthController {
   constructor(private authService: AuthService) {}
 
   @Public()
+  @Throttle(AUTH_THROTTLE)
   @Post('signup')
   @HttpCode(HttpStatus.OK)
   async signup(@Body() dto: SignupDto, @Res({ passthrough: true }) res: Response) {
@@ -25,6 +30,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle(AUTH_THROTTLE)
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
@@ -34,6 +40,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle(AUTH_THROTTLE)
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {

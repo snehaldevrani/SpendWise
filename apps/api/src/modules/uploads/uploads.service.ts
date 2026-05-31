@@ -54,7 +54,7 @@ export class UploadsService {
         if (this.isUniqueConstraintError(err)) {
           skipped++;
         } else {
-          errors.push({ row: -1, message: `DB error for ${row.merchant}: ${String(err)}` });
+          errors.push({ row: -1, message: `Failed to save transaction (row ${inserted + skipped + errors.length + 1})` });
         }
       }
     }

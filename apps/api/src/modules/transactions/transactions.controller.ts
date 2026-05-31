@@ -20,11 +20,15 @@ export class TransactionsController {
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
   ) {
+    const parsedPage = page ? Math.max(1, parseInt(page, 10) || 1) : undefined;
+    const parsedLimit = limit ? parseInt(limit, 10) : undefined;
+    const sanitizedSearch = search ? search.slice(0, 100) : undefined;
+
     return this.transactionsService.findAll(user.id, {
-      page: page ? parseInt(page) : undefined,
-      limit: limit ? parseInt(limit) : undefined,
+      page: parsedPage,
+      limit: parsedLimit,
       category,
-      search,
+      search: sanitizedSearch,
       startDate,
       endDate,
     });
