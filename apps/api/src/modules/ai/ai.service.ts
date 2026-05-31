@@ -1,8 +1,14 @@
-import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { Injectable, ServiceUnavailableException, HttpException, HttpStatus } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Anthropic from '@anthropic-ai/sdk';
 import { AiRecommendation } from '@spendwise/shared-types';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { CacheService } from '../../common/cache/cache.service';
+
+const RECOMMENDATIONS_TTL = 6 * 60 * 60; // 6 hours
+const CHAT_RATE_LIMIT = 20;               // messages per day
+const RECS_RATE_LIMIT = 4;               // recommendations per day
+const RATE_WINDOW = 24 * 60 * 60;        // 24 hours
 
 @Injectable()
 export class AiService {
@@ -11,11 +17,24 @@ export class AiService {
   constructor(
     private prisma: PrismaService,
     private config: ConfigService,
+    private cache: CacheService,
   ) {
     this.client = new Anthropic({ apiKey: this.config.get('ANTHROPIC_API_KEY') });
   }
 
   async getRecommendations(userId: string): Promise<AiRecommendation> {
+    // Per-user rate limit
+    const rateLimitKey = `ai:recs:rate:${userId}`;
+    const count = await this.cache.incr(rateLimitKey, RATE_WINDOW);
+    if (count > RECS_RATE_LIMIT) {
+      throw new HttpException('AI recommendation limit reached for today. Try again tomorrow.', HttpStatus.TOO_MANY_REQUESTS);
+    }
+
+    // Cache hit
+    const cacheKey = `ai:recs:${userId}`;
+    const cached = await this.cache.get<AiRecommendation>(cacheKey);
+    if (cached) return cached;
+
     const stats = await this.buildUserStats(userId);
 
     const message = await this.client.messages.create({
@@ -55,13 +74,27 @@ Return ONLY the JSON object, no explanation.`,
     try {
       const parsed = JSON.parse(raw.text) as AiRecommendation;
       this.validateRecommendation(parsed);
+      // Store in cache
+      await this.cache.set(cacheKey, parsed, RECOMMENDATIONS_TTL);
       return parsed;
     } catch {
       throw new ServiceUnavailableException('AI returned malformed response');
     }
   }
 
+  /** Call after a successful upload to bust the recommendations cache */
+  async bustRecommendationsCache(userId: string): Promise<void> {
+    await this.cache.del(`ai:recs:${userId}`);
+  }
+
   async chat(userId: string, question: string, contextChunks: string[]): Promise<string> {
+    // Per-user rate limit
+    const rateLimitKey = `ai:chat:rate:${userId}`;
+    const count = await this.cache.incr(rateLimitKey, RATE_WINDOW);
+    if (count > CHAT_RATE_LIMIT) {
+      throw new HttpException('AI chat limit reached for today. Try again tomorrow.', HttpStatus.TOO_MANY_REQUESTS);
+    }
+
     const context = contextChunks.length > 0
       ? `Relevant transaction history:\n${contextChunks.join('\n')}\n\n`
       : '';
@@ -87,7 +120,6 @@ Be concise. If the data doesn't contain an answer, say so honestly.`,
   private async buildUserStats(userId: string) {
     const now = new Date();
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
 
     const [recentTransactions, subscriptions] = await Promise.all([
       this.prisma.transaction.findMany({

@@ -5,6 +5,8 @@ import { ImportProcessor } from './import.processor';
 import { RagModule } from '../modules/rag/rag.module';
 import { SubscriptionsModule } from '../modules/subscriptions/subscriptions.module';
 import { InsightsModule } from '../modules/insights/insights.module';
+import { AlertsModule } from '../modules/alerts/alerts.module';
+import { PrismaModule } from '../common/prisma/prisma.module';
 import { IMPORT_QUEUE } from './queue.constants';
 
 @Module({
@@ -17,6 +19,7 @@ import { IMPORT_QUEUE } from './queue.constants';
           connection: {
             host: redisUrl.hostname,
             port: parseInt(redisUrl.port || '6379', 10),
+            maxRetriesPerRequest: null,
           },
         };
       },
@@ -26,6 +29,8 @@ import { IMPORT_QUEUE } from './queue.constants';
     RagModule,
     SubscriptionsModule,
     InsightsModule,
+    AlertsModule,
+    PrismaModule,
   ],
   providers: [ImportProcessor],
   exports: [BullModule],

@@ -1,5 +1,7 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import {
   ArrowUpRight,
   ArrowDownRight,
@@ -7,9 +9,9 @@ import {
   TrendingUp,
   CreditCard,
   RefreshCw,
+  Upload,
+  Sparkles,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import {
   AreaChart,
   Area,
@@ -23,334 +25,322 @@ import {
   Cell,
   Legend,
 } from "recharts";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { api } from "@/lib/api";
+import type { OverviewData, DailySpend, Transaction, Subscription, AiRecommendation } from "@/lib/api";
+import { useAuthStore, useUIStore } from "@/store";
 
-// 60-day spending data
-const spendingData = Array.from({ length: 60 }, (_, i) => {
-  const date = new Date();
-  date.setDate(date.getDate() - (59 - i));
-  return {
-    date: date.toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
-    amount: Math.floor(Math.random() * 1500) + 500,
-  };
-});
+const CATEGORY_COLORS: Record<string, string> = {
+  food: "#10b981", shopping: "#3b82f6", utilities: "#f59e0b",
+  transport: "#8b5cf6", entertainment: "#ec4899", health: "#ef4444",
+  subscriptions: "#06b6d4", income: "#84cc16", other: "#6b7280",
+};
+const CATEGORY_LABELS: Record<string, string> = {
+  food: "Food & Dining", shopping: "Shopping", utilities: "Bills & Utilities",
+  transport: "Transport", entertainment: "Entertainment", health: "Health",
+  subscriptions: "Subscriptions", income: "Income", other: "Others",
+};
+const CATEGORY_EMOJI: Record<string, string> = {
+  food: "ÃƒÂ°Ã…Â¸Ã‚ÂÃ¢â‚¬Â", shopping: "ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂºÃ¢â‚¬â„¢", utilities: "ÃƒÂ°Ã…Â¸Ã¢â‚¬â„¢Ã‚Â¡", transport: "ÃƒÂ°Ã…Â¸Ã…Â¡Ã¢â‚¬â€",
+  entertainment: "ÃƒÂ°Ã…Â¸Ã…Â½Ã‚Â¬", health: "ÃƒÂ°Ã…Â¸Ã‚ÂÃ‚Â¥", subscriptions: "ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ¢â‚¬Å¾", income: "ÃƒÂ°Ã…Â¸Ã¢â‚¬â„¢Ã‚Â°", other: "ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã‚Â¦",
+};
 
-// Category data
-const categoryData = [
-  { name: "Food & Dining", value: 8200, color: "#10b981" },
-  { name: "Shopping", value: 5400, color: "#3b82f6" },
-  { name: "Bills & Utilities", value: 4100, color: "#f59e0b" },
-  { name: "Transport", value: 2800, color: "#8b5cf6" },
-  { name: "Entertainment", value: 2100, color: "#ec4899" },
-  { name: "Others", value: 1750, color: "#6b7280" },
-];
+function fmt(n: number) {
+  return Math.abs(n).toLocaleString("en-IN");
+}
 
-// Recent transactions
-const transactions = [
-  { id: 1, date: "Today", merchant: "Swiggy", category: "🍔 Food", amount: -450, type: "debit" },
-  { id: 2, date: "Today", merchant: "Amazon Pay", category: "🛒 Shopping", amount: -2199, type: "debit" },
-  { id: 3, date: "Yesterday", merchant: "Salary Credit", category: "💰 Income", amount: 75000, type: "credit" },
-  { id: 4, date: "Yesterday", merchant: "Netflix", category: "🎬 Entertainment", amount: -649, type: "debit" },
-  { id: 5, date: "22 Jan", merchant: "Uber", category: "🚗 Transport", amount: -320, type: "debit" },
-  { id: 6, date: "22 Jan", merchant: "Electricity Bill", category: "💡 Bills", amount: -1850, type: "debit" },
-  { id: 7, date: "21 Jan", merchant: "Zomato", category: "🍔 Food", amount: -580, type: "debit" },
-  { id: 8, date: "21 Jan", merchant: "Reliance Fresh", category: "🛒 Shopping", amount: -920, type: "debit" },
-];
-
-// Active subscriptions preview
-const subscriptions = [
-  { name: "Netflix", amount: 649, cycle: "Monthly", logo: "🎬" },
-  { name: "Spotify", amount: 119, cycle: "Monthly", logo: "🎵" },
-  { name: "Amazon Prime", amount: 1499, cycle: "Yearly", logo: "📦" },
-];
-
-const statCards = [
-  {
-    title: "This Month",
-    value: "₹24,350",
-    change: "-8%",
-    trend: "down",
-    icon: Wallet,
-  },
-  {
-    title: "Last Month",
-    value: "₹26,500",
-    change: "+12%",
-    trend: "up",
-    icon: CreditCard,
-  },
-  {
-    title: "Savings",
-    value: "₹3,200",
-    change: "+15%",
-    trend: "up",
-    icon: TrendingUp,
-  },
-  {
-    title: "Active Subs",
-    value: "7",
-    change: "₹3,840/mo",
-    trend: "neutral",
-    icon: RefreshCw,
-  },
-];
+function EmptyState() {
+  const { setUploadDialog } = useUIStore();
+  return (
+    <div className="flex flex-col items-center justify-center py-24 text-center">
+      <div className="p-4 rounded-full bg-emerald-500/10 mb-4">
+        <Upload className="h-8 w-8 text-emerald-500" />
+      </div>
+      <h2 className="text-xl font-semibold text-white mb-2">No data yet</h2>
+      <p className="text-zinc-400 max-w-sm mb-6">
+        Upload your first bank statement to see spending trends, subscription leaks, and AI insights.
+      </p>
+      <Button onClick={() => setUploadDialog(true)} className="bg-emerald-500 hover:bg-emerald-600 text-black font-semibold">
+        <Upload className="h-4 w-4 mr-2" />Upload Statement
+      </Button>
+    </div>
+  );
+}
 
 export default function DashboardPage() {
+  const { user } = useAuthStore();
+  const router = useRouter();
+
+  const overview = useQuery<OverviewData | null>({
+    queryKey: ["overview"],
+    queryFn: () => api.get<OverviewData | null>("/transactions/overview").then((r) => r.data),
+    retry: false,
+  });
+
+  const dailySpend = useQuery<DailySpend[]>({
+    queryKey: ["daily-spend"],
+    queryFn: () => api.get<DailySpend[]>("/transactions/daily-spend?days=60").then((r) => r.data),
+    enabled: !!overview.data,
+  });
+
+  const recentTx = useQuery<{ total: number; items: Transaction[] }>({
+    queryKey: ["recent-transactions"],
+    queryFn: () => api.get<{ total: number; items: Transaction[] }>("/transactions?limit=8&page=1").then((r) => r.data),
+    enabled: !!overview.data,
+  });
+
+  const subs = useQuery<Subscription[]>({
+    queryKey: ["subscriptions"],
+    queryFn: () => api.get<Subscription[]>("/subscriptions").then((r) => r.data),
+    enabled: !!overview.data,
+  });
+
+  const aiRec = useQuery<AiRecommendation>({
+    queryKey: ["ai-recommendations"],
+    queryFn: () => api.get<AiRecommendation>("/ai/recommendations").then((r) => r.data),
+    enabled: !!overview.data,
+    staleTime: 6 * 60 * 60 * 1000,
+    retry: false,
+  });
+
+  if (!overview.isLoading && overview.data === null) {
+    return (
+      <div className="max-w-7xl mx-auto">
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold text-white">Dashboard</h1>
+          <p className="text-zinc-400 mt-1">Welcome, {user?.email?.split("@")[0]}!</p>
+        </div>
+        <EmptyState />
+      </div>
+    );
+  }
+
+  const current = overview.data?.current;
+  const previous = overview.data?.previous;
+  const spendDiff = current && previous && previous.total > 0
+    ? (((current.total - previous.total) / previous.total) * 100).toFixed(0)
+    : null;
+  const subsMonthlyCost = subs.data?.reduce(
+    (acc, s) => acc + (Number(s.avgAmount) * 30) / s.estimatedCycleDays, 0
+  ) ?? 0;
+
+  const categoryData = current?.breakdown?.map((b) => ({
+    name: CATEGORY_LABELS[b.category] ?? b.category,
+    value: Math.round(b.total),
+    color: CATEGORY_COLORS[b.category] ?? "#6b7280",
+  })) ?? [];
+
+  const spendingData = dailySpend.data?.map((d) => ({
+    date: new Date(d.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
+    amount: d.amount,
+  })) ?? [];
+
   return (
     <div className="max-w-7xl mx-auto">
-          {/* Header */}
-          <div className="mb-8">
-            <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-            <p className="text-zinc-400 mt-1">
-              Welcome back! Here&apos;s your financial overview.
-            </p>
-          </div>
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold text-white">Dashboard</h1>
+        <p className="text-zinc-400 mt-1">Welcome back, {user?.email?.split("@")[0]}! Here&apos;s your financial overview.</p>
+      </div>
 
-          {/* Stat Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            {statCards.map((stat) => (
-              <Card
-                key={stat.title}
-                className="bg-zinc-900/50 border-white/10 backdrop-blur-sm"
-              >
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="p-2 rounded-xl bg-emerald-500/10">
-                      <stat.icon className="h-5 w-5 text-emerald-500" />
-                    </div>
-                    {stat.trend !== "neutral" && (
-                      <div
-                        className={`flex items-center gap-1 text-sm ${
-                          stat.trend === "up"
-                            ? "text-emerald-500"
-                            : "text-red-500"
-                        }`}
-                      >
-                        {stat.trend === "up" ? (
-                          <ArrowUpRight className="h-4 w-4" />
-                        ) : (
-                          <ArrowDownRight className="h-4 w-4" />
-                        )}
-                        {stat.change}
+      {/* Stat Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <Card className="bg-zinc-900/50 border-white/10 backdrop-blur-sm">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-2 rounded-xl bg-emerald-500/10"><Wallet className="h-5 w-5 text-emerald-500" /></div>
+              {!overview.isLoading && spendDiff !== null && (
+                <div className={`flex items-center gap-1 text-sm ${Number(spendDiff) > 0 ? "text-red-500" : "text-emerald-500"}`}>
+                  {Number(spendDiff) > 0 ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+                  {spendDiff}%
+                </div>
+              )}
+            </div>
+            <p className="text-zinc-400 text-sm">This Month</p>
+            {overview.isLoading ? <Skeleton className="h-8 w-24 bg-zinc-800 mt-1" /> : <p className="text-2xl font-bold text-white mt-1">ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹{fmt(current?.total ?? 0)}</p>}
+          </CardContent>
+        </Card>
+
+        <Card className="bg-zinc-900/50 border-white/10 backdrop-blur-sm">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-2 rounded-xl bg-emerald-500/10"><CreditCard className="h-5 w-5 text-emerald-500" /></div>
+            </div>
+            <p className="text-zinc-400 text-sm">Last Month</p>
+            {overview.isLoading ? <Skeleton className="h-8 w-24 bg-zinc-800 mt-1" /> : <p className="text-2xl font-bold text-white mt-1">ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹{fmt(previous?.total ?? 0)}</p>}
+          </CardContent>
+        </Card>
+
+        <Card className="bg-zinc-900/50 border-white/10 backdrop-blur-sm">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-2 rounded-xl bg-emerald-500/10"><TrendingUp className="h-5 w-5 text-emerald-500" /></div>
+            </div>
+            <p className="text-zinc-400 text-sm">Savings This Month</p>
+            {overview.isLoading ? <Skeleton className="h-8 w-24 bg-zinc-800 mt-1" /> : (
+              <p className={`text-2xl font-bold mt-1 ${(current?.savings ?? 0) >= 0 ? "text-emerald-500" : "text-red-400"}`}>
+                ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹{fmt(current?.savings ?? 0)}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="bg-zinc-900/50 border-white/10 backdrop-blur-sm">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-2 rounded-xl bg-emerald-500/10"><RefreshCw className="h-5 w-5 text-emerald-500" /></div>
+              {!subs.isLoading && <span className="text-xs text-zinc-500">ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹{fmt(Math.round(subsMonthlyCost))}/mo</span>}
+            </div>
+            <p className="text-zinc-400 text-sm">Active Subs</p>
+            {subs.isLoading ? <Skeleton className="h-8 w-12 bg-zinc-800 mt-1" /> : <p className="text-2xl font-bold text-white mt-1">{subs.data?.length ?? 0}</p>}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Charts */}
+      <div className="grid lg:grid-cols-3 gap-6 mb-8">
+        <Card className="lg:col-span-2 bg-zinc-900/50 border-white/10 backdrop-blur-sm">
+          <CardHeader><CardTitle className="text-white">60-Day Spending Trend</CardTitle></CardHeader>
+          <CardContent>
+            <div className="h-[300px]">
+              {dailySpend.isLoading ? <Skeleton className="h-full w-full bg-zinc-800" /> : spendingData.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-zinc-500 text-sm">No spend data</div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={spendingData}>
+                    <defs>
+                      <linearGradient id="colorAmount" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                    <XAxis dataKey="date" stroke="#71717a" fontSize={12} tickLine={false} axisLine={false} interval={9} />
+                    <YAxis stroke="#71717a" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹${v}`} />
+                    <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #27272a", borderRadius: "8px" }} labelStyle={{ color: "#fff" }} formatter={(value) => [`ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹${value ?? 0}`, "Spent"]} />
+                    <Area type="monotone" dataKey="amount" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#colorAmount)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-zinc-900/50 border-white/10 backdrop-blur-sm">
+          <CardHeader><CardTitle className="text-white">By Category</CardTitle></CardHeader>
+          <CardContent>
+            <div className="h-[300px]">
+              {overview.isLoading ? <Skeleton className="h-full w-full bg-zinc-800" /> : categoryData.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-zinc-500 text-sm">No data</div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={categoryData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={4} dataKey="value">
+                      {categoryData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
+                    </Pie>
+                    <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #27272a", borderRadius: "8px" }} formatter={(value) => [`ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹${value ?? 0}`, ""]} />
+                    <Legend layout="vertical" align="right" verticalAlign="middle" iconType="circle" iconSize={8} formatter={(value) => <span className="text-zinc-400 text-xs">{value}</span>} />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Bottom row: Recent Transactions + Subs + AI */}
+      <div className="grid lg:grid-cols-3 gap-6">
+        <Card className="lg:col-span-2 bg-zinc-900/50 border-white/10 backdrop-blur-sm">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-white">Recent Transactions</CardTitle>
+            <a href="/transactions" className="text-sm text-emerald-500 hover:underline">View all</a>
+          </CardHeader>
+          <CardContent>
+            {recentTx.isLoading ? (
+              <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-10 w-full bg-zinc-800" />)}</div>
+            ) : !recentTx.data?.items?.length ? (
+              <p className="text-zinc-500 text-sm text-center py-8">No transactions yet</p>
+            ) : (
+              <div className="space-y-1">
+                {recentTx.data.items.map((tx) => (
+                  <div key={tx.id} className="flex items-center justify-between py-3 border-b border-white/5 last:border-0">
+                    <div className="flex items-center gap-4">
+                      <div className="text-xs text-zinc-500 w-20">{new Date(tx.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}</div>
+                      <div>
+                        <p className="text-white font-medium text-sm">{tx.merchant}</p>
+                        <Badge variant="secondary" className="bg-zinc-800 text-zinc-400 text-xs mt-0.5">
+                          {CATEGORY_EMOJI[tx.category]} {CATEGORY_LABELS[tx.category] ?? tx.category}
+                        </Badge>
                       </div>
-                    )}
-                    {stat.trend === "neutral" && (
-                      <span className="text-xs text-zinc-500">{stat.change}</span>
-                    )}
+                    </div>
+                    <span className={`font-semibold text-sm ${tx.type === "credit" ? "text-emerald-500" : "text-red-400"}`}>
+                      {tx.type === "credit" ? "+" : "-"}ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹{fmt(Number(tx.amount))}
+                    </span>
                   </div>
-                  <p className="text-zinc-400 text-sm">{stat.title}</p>
-                  <p className="text-2xl font-bold text-white mt-1">
-                    {stat.value}
-                  </p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
-          {/* Charts */}
-          <div className="grid lg:grid-cols-3 gap-6 mb-8">
-            {/* Area Chart */}
-            <Card className="lg:col-span-2 bg-zinc-900/50 border-white/10 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle className="text-white">Spending Trend</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[300px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={spendingData}>
-                      <defs>
-                        <linearGradient
-                          id="colorAmount"
-                          x1="0"
-                          y1="0"
-                          x2="0"
-                          y2="1"
-                        >
-                          <stop
-                            offset="5%"
-                            stopColor="#10b981"
-                            stopOpacity={0.3}
-                          />
-                          <stop
-                            offset="95%"
-                            stopColor="#10b981"
-                            stopOpacity={0}
-                          />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid
-                        strokeDasharray="3 3"
-                        stroke="#27272a"
-                        vertical={false}
-                      />
-                      <XAxis
-                        dataKey="date"
-                        stroke="#71717a"
-                        fontSize={12}
-                        tickLine={false}
-                        axisLine={false}
-                        interval={9}
-                      />
-                      <YAxis
-                        stroke="#71717a"
-                        fontSize={12}
-                        tickLine={false}
-                        axisLine={false}
-                        tickFormatter={(value) => `₹${value}`}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "#18181b",
-                          border: "1px solid #27272a",
-                          borderRadius: "8px",
-                        }}
-                        labelStyle={{ color: "#fff" }}
-                        formatter={(value) => [`₹${value ?? 0}`, "Spent"]}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="amount"
-                        stroke="#10b981"
-                        strokeWidth={2}
-                        fillOpacity={1}
-                        fill="url(#colorAmount)"
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Pie Chart */}
-            <Card className="bg-zinc-900/50 border-white/10 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle className="text-white">By Category</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[300px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={categoryData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={60}
-                        outerRadius={80}
-                        paddingAngle={4}
-                        dataKey="value"
-                      >
-                        {categoryData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "#18181b",
-                          border: "1px solid #27272a",
-                          borderRadius: "8px",
-                        }}
-                        formatter={(value) => [`₹${value ?? 0}`, ""]}
-                      />
-                      <Legend
-                        layout="vertical"
-                        align="right"
-                        verticalAlign="middle"
-                        iconType="circle"
-                        iconSize={8}
-                        formatter={(value) => (
-                          <span className="text-zinc-400 text-xs">{value}</span>
-                        )}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Transactions & Subscriptions */}
-          <div className="grid lg:grid-cols-3 gap-6">
-            {/* Recent Transactions */}
-            <Card className="lg:col-span-2 bg-zinc-900/50 border-white/10 backdrop-blur-sm">
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-white">Recent Transactions</CardTitle>
-                <a
-                  href="/transactions"
-                  className="text-sm text-emerald-500 hover:underline"
-                >
-                  View all
-                </a>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {transactions.map((tx) => (
-                    <div
-                      key={tx.id}
-                      className="flex items-center justify-between py-3 border-b border-white/5 last:border-0"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="text-xs text-zinc-500 w-16">
-                          {tx.date}
-                        </div>
-                        <div>
-                          <p className="text-white font-medium">{tx.merchant}</p>
-                          <Badge
-                            variant="secondary"
-                            className="bg-zinc-800 text-zinc-400 text-xs mt-1"
-                          >
-                            {tx.category}
-                          </Badge>
-                        </div>
-                      </div>
-                      <span
-                        className={`font-semibold ${
-                          tx.type === "credit"
-                            ? "text-emerald-500"
-                            : "text-red-400"
-                        }`}
-                      >
-                        {tx.type === "credit" ? "+" : ""}₹
-                        {Math.abs(tx.amount).toLocaleString()}
-                      </span>
+        <div className="space-y-4">
+          <Card className="bg-zinc-900/50 border-white/10 backdrop-blur-sm">
+            <CardHeader className="flex flex-row items-center justify-between pb-3">
+              <CardTitle className="text-white text-base">Active Subscriptions</CardTitle>
+              <a href="/subscriptions" className="text-sm text-emerald-500 hover:underline">View all</a>
+            </CardHeader>
+            <CardContent>
+              {subs.isLoading ? (
+                <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-8 w-full bg-zinc-800" />)}</div>
+              ) : !subs.data?.length ? (
+                <p className="text-zinc-500 text-sm text-center py-4">None detected yet</p>
+              ) : (
+                <div className="space-y-3">
+                  {subs.data.slice(0, 4).map((s) => (
+                    <div key={s.id} className="flex items-center justify-between">
+                      <p className="text-white text-sm truncate max-w-[130px]">{s.merchant}</p>
+                      <span className="text-zinc-400 text-sm">ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹{fmt(Math.round(Number(s.avgAmount)))}</span>
                     </div>
                   ))}
                 </div>
-              </CardContent>
-            </Card>
+              )}
+            </CardContent>
+          </Card>
 
-            {/* Active Subscriptions */}
-            <Card className="bg-zinc-900/50 border-white/10 backdrop-blur-sm">
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-white">Active Subscriptions</CardTitle>
-                <a
-                  href="/subscriptions"
-                  className="text-sm text-emerald-500 hover:underline"
-                >
-                  Manage
-                </a>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {subscriptions.map((sub) => (
-                    <div
-                      key={sub.name}
-                      className="flex items-center justify-between p-3 rounded-xl bg-zinc-800/50 border border-white/5"
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="text-2xl">{sub.logo}</span>
-                        <div>
-                          <p className="text-white font-medium">{sub.name}</p>
-                          <p className="text-zinc-500 text-xs">{sub.cycle}</p>
-                        </div>
-                      </div>
-                      <span className="text-white font-semibold">
-                        ₹{sub.amount}
-                      </span>
-                    </div>
-                  ))}
+          <Card className="bg-zinc-900/50 border-white/10 backdrop-blur-sm">
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-emerald-500/10"><Sparkles className="h-4 w-4 text-emerald-500" /></div>
+                <CardTitle className="text-white text-base">AI Insight</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {aiRec.isLoading ? (
+                <div className="space-y-2"><Skeleton className="h-4 w-full bg-zinc-800" /><Skeleton className="h-4 w-3/4 bg-zinc-800" /><Skeleton className="h-4 w-5/6 bg-zinc-800" /></div>
+              ) : aiRec.isError || !aiRec.data ? (
+                <div className="text-center py-2">
+                  <p className="text-zinc-500 text-xs">Upload data for AI insights</p>
+                  <Button variant="ghost" size="sm" onClick={() => router.push("/insights")} className="text-emerald-500 hover:text-emerald-400 mt-1 text-xs">Open AI Chat ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢</Button>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
+              ) : (
+                <div className="space-y-3">
+                  {aiRec.data.topLeaks[0] && (
+                    <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                      <p className="text-amber-400 text-xs font-medium">Top Leak Detected</p>
+                      <p className="text-white text-sm mt-1">{aiRec.data.topLeaks[0].merchant}</p>
+                      <p className="text-zinc-400 text-xs mt-0.5">Save ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹{fmt(aiRec.data.topLeaks[0].estimatedMonthlySavings)}/mo</p>
+                    </div>
+                  )}
+                  {aiRec.data.actionChecklist[0] && <p className="text-zinc-400 text-xs">{aiRec.data.actionChecklist[0]}</p>}
+                  <Button variant="ghost" size="sm" onClick={() => router.push("/insights")} className="w-full text-emerald-500 hover:text-emerald-400 text-xs border border-emerald-500/20">Ask follow-up ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢</Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </div>
   );
 }

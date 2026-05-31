@@ -5,23 +5,108 @@ export const api = axios.create({
   withCredentials: true,
 });
 
+// Track whether a token refresh is in progress to prevent race conditions
+let refreshPromise: Promise<void> | null = null;
+
 api.interceptors.response.use(
   (r) => r,
   async (error) => {
     const original = error.config;
     if (error.response?.status === 401 && !original._retry) {
       original._retry = true;
+
+      // Queue concurrent 401s behind a single refresh call
+      if (!refreshPromise) {
+        refreshPromise = axios
+          .post(
+            `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api'}/auth/refresh`,
+            {},
+            { withCredentials: true },
+          )
+          .then(() => {
+            refreshPromise = null;
+          })
+          .catch((err) => {
+            refreshPromise = null;
+            throw err;
+          });
+      }
+
       try {
-        await axios.post(
-          `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api'}/auth/refresh`,
-          {},
-          { withCredentials: true },
-        );
+        await refreshPromise;
         return api(original);
       } catch {
-        window.location.href = '/login';
+        if (typeof window !== 'undefined') window.location.href = '/login';
       }
     }
     return Promise.reject(error);
   },
 );
+
+// ─── Typed response helpers ───────────────────────────────────────────────────
+
+export interface OverviewData {
+  current: { total: number; totalIncome: number; savings: number; breakdown: Array<{ category: string; total: number; count: number }> };
+  previous: { total: number; totalIncome: number; savings: number };
+  latestMonth: number;
+  latestYear: number;
+}
+
+export interface DailySpend { date: string; amount: number }
+
+export interface Transaction {
+  id: string;
+  date: string;
+  merchant: string;
+  amount: string;
+  currency: string;
+  category: string;
+  type: 'debit' | 'credit';
+}
+
+export interface TransactionsPage {
+  total: number;
+  page: number;
+  limit: number;
+  items: Transaction[];
+}
+
+export interface Subscription {
+  id: string;
+  merchant: string;
+  estimatedCycleDays: number;
+  avgAmount: string;
+  confidenceScore: number;
+  lastChargeDate: string;
+  nextExpectedDate: string;
+  dismissed: boolean;
+  confirmed: boolean;
+  annualCost?: number;
+  isLikelyUnused?: boolean;
+}
+
+export interface Insight {
+  id: string;
+  weekStart: string;
+  summaryJson: {
+    totalSpend: number;
+    totalIncome: number;
+    byCategory: Record<string, number>;
+    topMerchants: Array<{ merchant: string; total: number }>;
+  };
+}
+
+export interface AiRecommendation {
+  topLeaks: Array<{ merchant: string; reason: string; estimatedMonthlySavings: number }>;
+  estimatedMonthlySavings: number;
+  actionChecklist: string[];
+  uncertaintyNotes: string;
+}
+
+export interface UserPreferences {
+  weeklyEmail: boolean;
+  newSubAlert: boolean;
+  spikeAlert: boolean;
+  timezone: string;
+}
+

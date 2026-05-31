@@ -17,6 +17,8 @@ async function bootstrap() {
         directives: {
           defaultSrc: ["'self'"],
           scriptSrc: ["'self'"],
+          styleSrc: ["'self'", "'unsafe-inline'"], // Allow inline styles for Swagger UI
+          imgSrc: ["'self'", 'data:', 'https:'],
           objectSrc: ["'none'"],
           upgradeInsecureRequests: [],
         },
@@ -38,6 +40,12 @@ async function bootstrap() {
   app.enableCors({
     origin: process.env.FRONTEND_URL ?? 'http://localhost:3000',
     credentials: true,
+  });
+
+  // Health check endpoints (no auth required)
+  const httpAdapter = app.getHttpAdapter();
+  httpAdapter.get('/health', (_req: unknown, res: { json: (v: unknown) => void }) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
   const config = new DocumentBuilder()
