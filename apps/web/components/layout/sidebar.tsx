@@ -14,6 +14,7 @@ import {
   Menu,
   X,
   Upload,
+  PiggyBank,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -25,6 +26,7 @@ const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/transactions", label: "Transactions", icon: CreditCard },
   { href: "/subscriptions", label: "Subscriptions", icon: RefreshCw },
+  { href: "/budgets", label: "Budgets", icon: PiggyBank },
   { href: "/insights", label: "Insights", icon: Lightbulb },
   { href: "/settings", label: "Settings", icon: Settings2 },
 ];

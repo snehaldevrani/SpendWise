@@ -145,4 +145,37 @@ export class TransactionsService {
     await this.prisma.transaction.deleteMany({ where: { userId } });
     return { deleted: true };
   }
+
+  /**
+   * Returns monthly spend per category for the last N months.
+   * Shape: [{ month: '2026-01', food: 3200, shopping: 1500, ... }, ...]
+   */
+  async getCategoryTrends(userId: string, months = 6) {
+    const now = new Date();
+    const results: Array<Record<string, string | number>> = [];
+
+    for (let i = months - 1; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const m = date.getMonth() + 1;
+      const y = date.getFullYear();
+      const start = new Date(y, m - 1, 1);
+      const end = new Date(y, m, 0, 23, 59, 59);
+
+      const txns = await this.prisma.transaction.findMany({
+        where: { userId, type: 'debit', date: { gte: start, lte: end } },
+        select: { category: true, amount: true },
+      });
+
+      const row: Record<string, string | number> = {
+        month: `${y}-${String(m).padStart(2, '0')}`,
+      };
+      for (const t of txns) {
+        const cat = t.category as string;
+        row[cat] = Math.round(((row[cat] as number ?? 0) + Number(t.amount)) * 100) / 100;
+      }
+      results.push(row);
+    }
+
+    return results;
+  }
 }

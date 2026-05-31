@@ -2,21 +2,29 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Send, Sparkles, Lightbulb, Upload } from "lucide-react";
+import { Send, Sparkles, Lightbulb, Upload, BarChart3 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+} from "recharts";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
-import type { Insight } from "@/lib/api";
+import type { Insight, CategoryTrendsRow } from "@/lib/api";
 import { useUIStore } from "@/store";
 
 const CATEGORY_COLORS: Record<string, string> = {
   food: "bg-orange-500", shopping: "bg-blue-500", utilities: "bg-yellow-500",
   transport: "bg-purple-500", entertainment: "bg-pink-500", health: "bg-red-500",
   subscriptions: "bg-cyan-500", income: "bg-emerald-500", other: "bg-zinc-500",
+};
+const CHART_COLORS: Record<string, string> = {
+  food: "#f97316", shopping: "#3b82f6", utilities: "#eab308",
+  transport: "#8b5cf6", entertainment: "#ec4899", health: "#ef4444",
+  subscriptions: "#06b6d4", other: "#6b7280",
 };
 const CATEGORY_LABELS: Record<string, string> = {
   food: "Food", shopping: "Shopping", utilities: "Bills", transport: "Transport",
@@ -49,6 +57,12 @@ export default function InsightsPage() {
   const insightsQuery = useQuery<Insight[]>({
     queryKey: ["insights"],
     queryFn: () => api.get<Insight[]>("/insights").then((r) => r.data),
+  });
+
+  const trendsQuery = useQuery<CategoryTrendsRow[]>({
+    queryKey: ["category-trends"],
+    queryFn: () => api.get<CategoryTrendsRow[]>("/transactions/category-trends?months=6").then((r) => r.data),
+    staleTime: 10 * 60 * 1000,
   });
 
   const insights = insightsQuery.data ?? [];
@@ -152,9 +166,48 @@ export default function InsightsPage() {
           </div>
         </Card>
 
-        {/* Weekly Insights */}
+        {/* Weekly Insights + Trends */}
         <div className="space-y-4 overflow-y-auto max-h-[calc(100vh-200px)]">
+          {/* 6-Month Category Trends Chart */}
           <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+            <BarChart3 className="h-5 w-5 text-emerald-500" />6-Month Trends
+          </h2>
+          <Card className="bg-zinc-900/50 border-white/10 backdrop-blur-sm">
+            <CardContent className="p-4">
+              {trendsQuery.isLoading ? (
+                <Skeleton className="h-48 w-full bg-zinc-800" />
+              ) : !trendsQuery.data?.length || trendsQuery.data.every((r) => Object.keys(r).length <= 1) ? (
+                <div className="flex flex-col items-center py-8 text-center">
+                  <p className="text-zinc-500 text-sm">No trend data yet</p>
+                  <p className="text-zinc-600 text-xs mt-1">Upload a few months of statements to see category trends</p>
+                </div>
+              ) : (
+                <div className="h-52">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={trendsQuery.data} margin={{ top: 4, right: 4, bottom: 4, left: -10 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                      <XAxis dataKey="month" stroke="#71717a" fontSize={10} tickLine={false} axisLine={false}
+                        tickFormatter={(v: string) => { const [y, m] = v.split("-"); return new Date(Number(y), Number(m) - 1).toLocaleDateString("en-IN", { month: "short" }); }} />
+                      <YAxis stroke="#71717a" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(v: number) => `₹${v >= 1000 ? `${Math.round(v / 1000)}k` : v}`} />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: "#18181b", border: "1px solid #27272a", borderRadius: "8px", fontSize: "12px" }}
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        formatter={(value: any, name: any) => [`₹${Math.round(Number(value ?? 0)).toLocaleString("en-IN")}`, CATEGORY_LABELS[String(name ?? "")] ?? String(name ?? "")]}
+                      />
+                      <Legend iconType="circle" iconSize={8} formatter={(value: string) => <span className="text-zinc-400 text-xs">{CATEGORY_LABELS[value] ?? value}</span>} />
+                      {Object.keys(CHART_COLORS)
+                        .filter((cat) => trendsQuery.data?.some((r) => (r[cat] ?? 0) > 0))
+                        .map((cat) => (
+                          <Bar key={cat} dataKey={cat} stackId="a" fill={CHART_COLORS[cat]} radius={cat === "other" ? [3, 3, 0, 0] : undefined} />
+                        ))}
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <h2 className="text-lg font-semibold text-white flex items-center gap-2 pt-2">
             <Lightbulb className="h-5 w-5 text-emerald-500" />Weekly Insights
           </h2>
 

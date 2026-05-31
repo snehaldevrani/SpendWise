@@ -58,6 +58,14 @@ export class TransactionsController {
     return this.transactionsService.clearAllData(user.id);
   }
 
+  @Get('category-trends')
+  getCategoryTrends(
+    @CurrentUser() user: AuthUser,
+    @Query('months') months?: string,
+  ) {
+    return this.transactionsService.getCategoryTrends(user.id, months ? parseInt(months, 10) : 6);
+  }
+
   @Patch(':id/category')
   updateCategory(
     @CurrentUser() user: AuthUser,

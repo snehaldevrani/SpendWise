@@ -110,3 +110,28 @@ export interface UserPreferences {
   timezone: string;
 }
 
+export type BudgetStatus = 'ok' | 'warning' | 'over';
+
+export interface BudgetItem {
+  id: string;
+  category: string;
+  limitAmount: number;
+  spent: number;
+  remaining: number;
+  percentUsed: number;
+  forecast: number;
+  status: BudgetStatus;
+  month: number;
+  year: number;
+}
+
+export interface BudgetSummary {
+  items: BudgetItem[];
+  totalLimit: number;
+  totalSpent: number;
+  overBudget: number;
+  healthScore: number;
+}
+
+export type CategoryTrendsRow = { month: string } & Record<string, number>;
+
