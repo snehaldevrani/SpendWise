@@ -9,7 +9,6 @@ import {
   Zap,
   ArrowRight,
   ExternalLink,
-  Users,
   Target,
   Sparkles,
 } from "lucide-react";
@@ -17,7 +16,6 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const stats = [
-  { label: "Active Users", value: "1,400+", icon: Users },
   { label: "Accuracy", value: "98%", icon: Target },
   { label: "Avg Savings", value: "₹12k", icon: Sparkles },
 ];
