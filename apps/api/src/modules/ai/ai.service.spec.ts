@@ -4,14 +4,15 @@ import { ConfigService } from '@nestjs/config';
 import { CacheService } from '../../common/cache/cache.service';
 import { ServiceUnavailableException, HttpException } from '@nestjs/common';
 
-// Mock the Anthropic SDK so no real API calls are made
-jest.mock('@anthropic-ai/sdk', () => {
+// Mock the Google Generative AI SDK so no real API calls are made
+const mockGenerateContent = jest.fn();
+
+jest.mock('@google/generative-ai', () => {
   return {
-    __esModule: true,
-    default: jest.fn().mockImplementation(() => ({
-      messages: {
-        create: jest.fn(),
-      },
+    GoogleGenerativeAI: jest.fn().mockImplementation(() => ({
+      getGenerativeModel: jest.fn().mockReturnValue({
+        generateContent: mockGenerateContent,
+      }),
     })),
   };
 });
@@ -45,6 +46,8 @@ describe('AiService', () => {
 
     const config = { get: jest.fn().mockReturnValue('test-api-key') } as unknown as ConfigService;
 
+    mockGenerateContent.mockReset();
+
     service = new AiService(prisma, config, cache);
   });
 
@@ -69,10 +72,8 @@ describe('AiService', () => {
       (cache.get as jest.Mock).mockResolvedValue(null);
       const rec = makeValidRecommendation();
 
-      // Mock the anthropic client on the service instance directly
-      const client = (service as unknown as { client: { messages: { create: jest.Mock } } }).client;
-      client.messages.create = jest.fn().mockResolvedValue({
-        content: [{ type: 'text', text: JSON.stringify(rec) }],
+      mockGenerateContent.mockResolvedValue({
+        response: { text: () => JSON.stringify(rec) },
       });
 
       const result = await service.getRecommendations('user-1');
@@ -85,9 +86,8 @@ describe('AiService', () => {
     it('throws ServiceUnavailableException on malformed AI response', async () => {
       (cache.get as jest.Mock).mockResolvedValue(null);
 
-      const client = (service as unknown as { client: { messages: { create: jest.Mock } } }).client;
-      client.messages.create = jest.fn().mockResolvedValue({
-        content: [{ type: 'text', text: '{ "bad": "json missing required fields" }' }],
+      mockGenerateContent.mockResolvedValue({
+        response: { text: () => '{ "bad": "json missing required fields" }' },
       });
 
       await expect(service.getRecommendations('user-1')).rejects.toThrow(ServiceUnavailableException);
@@ -112,9 +112,8 @@ describe('AiService', () => {
     });
 
     it('returns the AI answer string', async () => {
-      const client = (service as unknown as { client: { messages: { create: jest.Mock } } }).client;
-      client.messages.create = jest.fn().mockResolvedValue({
-        content: [{ type: 'text', text: 'Your top expense is food (₹5,200).' }],
+      mockGenerateContent.mockResolvedValue({
+        response: { text: () => 'Your top expense is food (₹5,200).' },
       });
 
       const answer = await service.chat('user-1', 'Top expense?', ['txn: food 500']);
@@ -123,34 +122,27 @@ describe('AiService', () => {
     });
 
     it('includes context chunks in the prompt', async () => {
-      const client = (service as unknown as { client: { messages: { create: jest.Mock } } }).client;
-      const mockCreate = jest.fn().mockResolvedValue({
-        content: [{ type: 'text', text: 'Based on your data...' }],
+      mockGenerateContent.mockResolvedValue({
+        response: { text: () => 'Based on your data...' },
       });
-      client.messages.create = mockCreate;
 
       await service.chat('user-1', 'What did I spend on food?', ['txn: Swiggy 350', 'txn: Zomato 200']);
 
-      const callArgs = mockCreate.mock.calls[0][0];
-      const userMessage = callArgs.messages[0].content as string;
-      expect(userMessage).toContain('Swiggy');
-      expect(userMessage).toContain('Zomato');
+      const callArg: string = mockGenerateContent.mock.calls[0][0];
+      expect(callArg).toContain('Swiggy');
+      expect(callArg).toContain('Zomato');
     });
 
     it('sends the question without context when no chunks provided', async () => {
-      const client = (service as unknown as { client: { messages: { create: jest.Mock } } }).client;
-      const mockCreate = jest.fn().mockResolvedValue({
-        content: [{ type: 'text', text: 'Not enough data.' }],
+      mockGenerateContent.mockResolvedValue({
+        response: { text: () => 'Not enough data.' },
       });
-      client.messages.create = mockCreate;
 
       await service.chat('user-1', 'Any subscriptions?', []);
 
-      const callArgs = mockCreate.mock.calls[0][0];
-      const userMessage = callArgs.messages[0].content as string;
-      // No context prefix when chunks are empty
-      expect(userMessage).not.toContain('Relevant transaction history');
-      expect(userMessage).toContain('Any subscriptions?');
+      const callArg: string = mockGenerateContent.mock.calls[0][0];
+      expect(callArg).not.toContain('Additional semantic matches');
+      expect(callArg).toContain('Any subscriptions?');
     });
   });
 });
