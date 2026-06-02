@@ -98,19 +98,58 @@ Return ONLY the JSON object, no explanation.`,
       throw new HttpException('AI chat limit reached for today. Try again tomorrow.', HttpStatus.TOO_MANY_REQUESTS);
     }
 
-    const context = contextChunks.length > 0
-      ? `Relevant transaction history:\n${contextChunks.join('\n')}\n\n`
+    // Always fetch ALL transactions for factual accuracy.
+    // Semantic RAG alone cannot answer aggregate/numeric queries (largest, total, count)
+    // because it returns semantically similar chunks, not sorted-by-amount ones.
+    const allTxns = await this.prisma.transaction.findMany({
+      where: { userId },
+      select: { merchant: true, amount: true, category: true, date: true, type: true },
+      orderBy: [{ amount: 'desc' }, { date: 'desc' }],
+    });
+
+    let structuredContext = '';
+    if (allTxns.length > 0) {
+      const debits = allTxns.filter((t) => t.type === 'debit');
+      const credits = allTxns.filter((t) => t.type === 'credit');
+      const totalDebit = debits.reduce((s, t) => s + Number(t.amount), 0);
+      const totalCredit = credits.reduce((s, t) => s + Number(t.amount), 0);
+
+      const categoryTotals: Record<string, number> = {};
+      for (const t of debits) {
+        categoryTotals[t.category] = (categoryTotals[t.category] ?? 0) + Number(t.amount);
+      }
+      const categorySummary = Object.entries(categoryTotals)
+        .sort(([, a], [, b]) => b - a)
+        .map(([c, a]) => `${c} ₹${a.toFixed(2)}`)
+        .join(', ');
+
+      const txnLines = allTxns
+        .map((t) => `  ${new Date(t.date).toISOString().slice(0, 10)}: ${t.merchant} (${t.category}) ₹${Number(t.amount).toFixed(2)} [${t.type}]`)
+        .join('\n');
+
+      structuredContext = `COMPLETE TRANSACTION LIST (all ${allTxns.length} transactions, sorted by amount desc):
+Summary: ₹${totalDebit.toFixed(2)} total debits (${debits.length} txns), ₹${totalCredit.toFixed(2)} total credits (${credits.length} txns)
+By category (debits): ${categorySummary}
+Largest single debit: ${debits[0] ? `${debits[0].merchant} ₹${Number(debits[0].amount).toFixed(2)} on ${new Date(debits[0].date).toISOString().slice(0, 10)}` : 'none'}
+
+Transactions:
+${txnLines}`;
+    }
+
+    const ragContext = contextChunks.length > 0
+      ? `\nAdditional semantic matches:\n${contextChunks.join('\n')}`
       : '';
 
     const message = await this.client.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 512,
-      system: `You are a personal finance assistant. Answer questions about the user's spending using only the provided data.
-Be concise. If the data doesn't contain an answer, say so honestly.`,
+      max_tokens: 1024,
+      system: `You are a personal finance assistant. Answer questions about the user's spending using ONLY the provided transaction data.
+The COMPLETE TRANSACTION LIST contains every transaction — use it for all factual queries (largest, total, count, by category, etc.).
+Be concise and accurate. Never guess or approximate when the exact data is present.`,
       messages: [
         {
           role: 'user',
-          content: `${context}Question: ${question}`,
+          content: `${structuredContext}${ragContext}\n\nQuestion: ${question}`,
         },
       ],
     });
