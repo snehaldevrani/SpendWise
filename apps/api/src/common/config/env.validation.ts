@@ -29,10 +29,7 @@ class EnvironmentVariables {
   JWT_REFRESH_EXPIRES_IN!: string;
 
   @IsString()
-  ANTHROPIC_API_KEY!: string;
-
-  @IsString()
-  VOYAGE_API_KEY!: string;
+  GEMINI_API_KEY!: string;
 
   @IsString()
   RESEND_API_KEY!: string;
