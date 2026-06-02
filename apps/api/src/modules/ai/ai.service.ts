@@ -71,14 +71,17 @@ Return ONLY the JSON object, no explanation.`,
     const raw = message.content[0];
     if (raw.type !== 'text') throw new ServiceUnavailableException('Unexpected AI response type');
 
+    // Strip markdown fences if Claude wraps the JSON
+    const jsonText = raw.text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
+
     try {
-      const parsed = JSON.parse(raw.text) as AiRecommendation;
+      const parsed = JSON.parse(jsonText) as AiRecommendation;
       this.validateRecommendation(parsed);
       // Store in cache
       await this.cache.set(cacheKey, parsed, RECOMMENDATIONS_TTL);
       return parsed;
-    } catch {
-      throw new ServiceUnavailableException('AI returned malformed response');
+    } catch (err) {
+      throw new ServiceUnavailableException(`AI returned malformed response: ${(err as Error).message}`);
     }
   }
 

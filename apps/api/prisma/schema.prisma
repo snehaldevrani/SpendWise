@@ -1,6 +1,7 @@
 generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["driverAdapters"]
+  binaryTargets   = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
@@ -66,8 +67,8 @@ model Transaction {
   rawText  String          @map("raw_text")
   dedupKey String          @map("dedup_key")
 
-  // pgvector — 1024 dims (Voyage AI voyage-3-lite)
-  embedding Unsupported("vector(1024)")?
+  // pgvector — 512 dims (Voyage AI voyage-3-lite)
+  embedding Unsupported("vector(512)")?
 
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -133,7 +134,7 @@ model DocumentChunk {
   chunkText  String @map("chunk_text")
   chunkIndex Int    @map("chunk_index")
 
-  embedding Unsupported("vector(1024)")?
+  embedding Unsupported("vector(512)")?
 
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
 

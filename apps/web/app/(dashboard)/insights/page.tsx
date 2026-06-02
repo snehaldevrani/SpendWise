@@ -44,7 +44,7 @@ interface Message { id: number; role: "user" | "assistant"; content: string }
 const GREETING: Message = {
   id: 0,
   role: "assistant",
-  content: "Hi! I'm your SpendWise AI. Ask me anything about your spending Ã¢â‚¬â€ I analyse your real transaction history to give you personalised answers.",
+  content: "Hi! I'm your SpendWise AI. Ask me anything about your spending — I analyse your real transaction history to give you personalised answers.",
 };
 
 export default function InsightsPage() {
@@ -233,7 +233,7 @@ export default function InsightsPage() {
                   <CardContent className="p-4 space-y-4">
                     <div className="flex items-center justify-between">
                       <span className="text-zinc-400 text-sm font-medium">{weekLabel}</span>
-                      <span className="text-white font-bold">Ã¢â€šÂ¹{Math.round(summary.totalSpend ?? 0).toLocaleString("en-IN")}</span>
+                      <span className="text-white font-bold">₹{Math.round(summary.totalSpend ?? 0).toLocaleString("en-IN")}</span>
                     </div>
                     {cats.length > 0 && (
                       <>
@@ -255,7 +255,7 @@ export default function InsightsPage() {
                     )}
                     {summary.topMerchants?.[0] && (
                       <p className="text-zinc-500 text-xs border-t border-white/10 pt-3">
-                        Top: <span className="text-zinc-300">{summary.topMerchants[0].merchant}</span> Ã¢â‚¬â€ Ã¢â€šÂ¹{Math.round(summary.topMerchants[0].total).toLocaleString("en-IN")}
+                        Top: <span className="text-zinc-300">{summary.topMerchants[0].merchant}</span> — ₹{Math.round(summary.topMerchants[0].total).toLocaleString("en-IN")}
                       </p>
                     )}
                   </CardContent>

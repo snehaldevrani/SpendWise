@@ -17,27 +17,27 @@ import { useUIStore } from "@/store";
 
 const CATEGORIES = [
   { value: "all", label: "All Categories" },
-  { value: "food", label: "ðŸ” Food & Dining" },
-  { value: "shopping", label: "ðŸ›’ Shopping" },
-  { value: "travel", label: "ðŸš— Transport" },
-  { value: "utilities", label: "ðŸ’¡ Bills & Utilities" },
-  { value: "entertainment", label: "ðŸŽ¬ Entertainment" },
-  { value: "income", label: "ðŸ’° Income" },
-  { value: "health", label: "ðŸ¥ Health" },
-  { value: "subscriptions", label: "ðŸ”„ Subscriptions" },
-  { value: "other", label: "ðŸ“¦ Other" },
+  { value: "food", label: "🍔 Food & Dining" },
+  { value: "shopping", label: "🛒 Shopping" },
+  { value: "travel", label: "🚗 Transport" },
+  { value: "utilities", label: "💡 Bills & Utilities" },
+  { value: "entertainment", label: "🎬 Entertainment" },
+  { value: "income", label: "💰 Income" },
+  { value: "health", label: "🏥 Health" },
+  { value: "subscriptions", label: "🔄 Subscriptions" },
+  { value: "other", label: "📦 Other" },
 ];
 
 const CAT_META: Record<string, { emoji: string; label: string; color: string }> = {
-  food: { emoji: "ðŸ”", label: "Food & Dining", color: "bg-orange-500/20 text-orange-400" },
-  shopping: { emoji: "ðŸ›’", label: "Shopping", color: "bg-blue-500/20 text-blue-400" },
-  travel: { emoji: "ðŸš—", label: "Travel", color: "bg-purple-500/20 text-purple-400" },
-  utilities: { emoji: "ðŸ’¡", label: "Bills & Utilities", color: "bg-yellow-500/20 text-yellow-400" },
-  entertainment: { emoji: "ðŸŽ¬", label: "Entertainment", color: "bg-pink-500/20 text-pink-400" },
-  income: { emoji: "ðŸ’°", label: "Income", color: "bg-emerald-500/20 text-emerald-400" },
-  health: { emoji: "ðŸ¥", label: "Health", color: "bg-red-500/20 text-red-400" },
-  subscriptions: { emoji: "ðŸ”„", label: "Subscriptions", color: "bg-cyan-500/20 text-cyan-400" },
-  other: { emoji: "ðŸ“¦", label: "Other", color: "bg-zinc-500/20 text-zinc-400" },
+  food: { emoji: "🍔", label: "Food & Dining", color: "bg-orange-500/20 text-orange-400" },
+  shopping: { emoji: "🛒", label: "Shopping", color: "bg-blue-500/20 text-blue-400" },
+  travel: { emoji: "🚗", label: "Travel", color: "bg-purple-500/20 text-purple-400" },
+  utilities: { emoji: "💡", label: "Bills & Utilities", color: "bg-yellow-500/20 text-yellow-400" },
+  entertainment: { emoji: "🎬", label: "Entertainment", color: "bg-pink-500/20 text-pink-400" },
+  income: { emoji: "💰", label: "Income", color: "bg-emerald-500/20 text-emerald-400" },
+  health: { emoji: "🏥", label: "Health", color: "bg-red-500/20 text-red-400" },
+  subscriptions: { emoji: "🔄", label: "Subscriptions", color: "bg-cyan-500/20 text-cyan-400" },
+  other: { emoji: "📦", label: "Other", color: "bg-zinc-500/20 text-zinc-400" },
 };
 
 const ITEMS_PER_PAGE = 20;
@@ -246,7 +246,7 @@ export default function TransactionsPage() {
               {totalPages > 1 && (
                 <div className="flex items-center justify-between mt-6 pt-4 border-t border-white/10">
                   <p className="text-zinc-500 text-sm">
-                    Showing {(page - 1) * ITEMS_PER_PAGE + 1}â€“{Math.min(page * ITEMS_PER_PAGE, total)} of {total}
+                    Showing {(page - 1) * ITEMS_PER_PAGE + 1}–{Math.min(page * ITEMS_PER_PAGE, total)} of {total}
                   </p>
                   <div className="flex items-center gap-2">
                     <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} className="border-white/10 text-white hover:bg-white/10">

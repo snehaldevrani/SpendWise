@@ -1,18 +1,24 @@
 'use client';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store';
 
 export function GuestGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    if (user) {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (mounted && user) {
       router.replace('/dashboard');
     }
-  }, [user, router]);
+  }, [mounted, user, router]);
 
+  if (!mounted) return null;
   if (user) return null;
 
   return <>{children}</>;

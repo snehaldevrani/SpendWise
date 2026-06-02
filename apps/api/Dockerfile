@@ -26,6 +26,9 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
+# OpenSSL required by Prisma's query/schema engine binaries on Alpine
+RUN apk add --no-cache openssl
+
 # Install only production deps
 COPY package.json package-lock.json ./
 COPY packages/ ./packages/
@@ -35,11 +38,12 @@ RUN npm ci --workspace=apps/api --include-workspace-root --omit=dev && npm cache
 
 # Copy compiled output and Prisma artefacts from builder
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
-COPY --from=builder /app/apps/api/node_modules/.prisma ./apps/api/node_modules/.prisma
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY apps/api/prisma ./apps/api/prisma
 
 # Non-root user for security
-RUN addgroup -S spendwise && adduser -S spendwise -G spendwise
+RUN addgroup -S spendwise && adduser -S spendwise -G spendwise && \
+    chown -R spendwise:spendwise /app/node_modules/@prisma /app/node_modules/.prisma /app/node_modules/prisma /app/apps
 USER spendwise
 
 EXPOSE 3001

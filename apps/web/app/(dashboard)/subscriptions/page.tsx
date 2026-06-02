@@ -70,7 +70,7 @@ export default function SubscriptionsPage() {
           <CardContent className="p-6">
             <div className="p-2 rounded-xl bg-emerald-500/10 w-fit mb-4"><RefreshCw className="h-5 w-5 text-emerald-500" /></div>
             <p className="text-zinc-400 text-sm">Monthly Cost</p>
-            {isLoading ? <Skeleton className="h-8 w-24 bg-zinc-800 mt-1" /> : <p className="text-2xl font-bold text-white mt-1">ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹{fmt(monthlyCost)}</p>}
+            {isLoading ? <Skeleton className="h-8 w-24 bg-zinc-800 mt-1" /> : <p className="text-2xl font-bold text-white mt-1">₹{fmt(monthlyCost)}</p>}
             <p className="text-zinc-500 text-xs mt-1">{subs.length} active subscription{subs.length !== 1 ? "s" : ""}</p>
           </CardContent>
         </Card>
@@ -86,7 +86,7 @@ export default function SubscriptionsPage() {
           <CardContent className="p-6">
             <div className="p-2 rounded-xl bg-emerald-500/10 w-fit mb-4"><TrendingUp className="h-5 w-5 text-emerald-500" /></div>
             <p className="text-zinc-400 text-sm">Potential Annual Savings</p>
-            {leaksQuery.isLoading ? <Skeleton className="h-8 w-24 bg-zinc-800 mt-1" /> : <p className="text-2xl font-bold text-white mt-1">ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹{fmt(annualSavings)}</p>}
+            {leaksQuery.isLoading ? <Skeleton className="h-8 w-24 bg-zinc-800 mt-1" /> : <p className="text-2xl font-bold text-white mt-1">₹{fmt(annualSavings)}</p>}
             <p className="text-zinc-500 text-xs mt-1">If you cancel {leaksQuery.data?.length ?? 0} unused</p>
           </CardContent>
         </Card>
@@ -146,11 +146,11 @@ export default function SubscriptionsPage() {
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-zinc-500">Annual cost</span>
-                      <span className="text-white">ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹{fmt(annualCost)}</span>
+                      <span className="text-white">₹{fmt(annualCost)}</span>
                     </div>
                     <div className="flex items-center justify-between pt-2 border-t border-white/10">
                       <span className="text-zinc-400 font-medium">Amount</span>
-                      <span className="text-emerald-500 font-bold text-lg">ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹{fmt(Number(sub.avgAmount))}</span>
+                      <span className="text-emerald-500 font-bold text-lg">₹{fmt(Number(sub.avgAmount))}</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 pt-2">

@@ -4,7 +4,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 
 const TOP_K = 8;
-const EMBEDDING_DIMS = 1024;
+const EMBEDDING_DIMS = 512;
 
 @Injectable()
 export class RagService {
@@ -55,7 +55,7 @@ export class RagService {
         // Use Prisma tagged template ($executeRaw) — parameters are bound, not interpolated.
         // The embedding array is serialised to a string first, then passed as a typed $1 parameter.
         const vectorLiteral = `[${embedding.join(',')}]`;
-        await this.prisma.$executeRaw`UPDATE transactions SET embedding = ${vectorLiteral}::vector WHERE id = ${txns[i].id}::uuid`;
+        await this.prisma.$executeRaw`UPDATE transactions SET embedding = ${vectorLiteral}::vector WHERE id = ${txns[i].id}`;
       }
     } catch (err) {
       this.logger.error('Failed to embed transactions', err);
@@ -64,7 +64,7 @@ export class RagService {
 
   async embedAllForUser(userId: string): Promise<void> {
     const txns = await this.prisma.$queryRaw<Array<{ id: string }>>`
-      SELECT id FROM transactions WHERE user_id = ${userId}::uuid AND embedding IS NULL
+      SELECT id FROM transactions WHERE user_id = ${userId} AND embedding IS NULL
     `;
     if (txns.length === 0) return;
     const ids = txns.map((t) => t.id);
@@ -92,7 +92,7 @@ export class RagService {
     >`
       SELECT merchant, category, amount::float, date, type
       FROM transactions
-      WHERE user_id = ${userId}::uuid AND embedding IS NOT NULL
+      WHERE user_id = ${userId} AND embedding IS NOT NULL
       ORDER BY embedding <=> ${vectorLiteral}::vector
       LIMIT ${Prisma.raw(String(topK))}
     `;

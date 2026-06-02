@@ -44,8 +44,8 @@ const CATEGORY_LABELS: Record<string, string> = {
   subscriptions: "Subscriptions", income: "Income", other: "Others",
 };
 const CATEGORY_EMOJI: Record<string, string> = {
-  food: "ÃƒÂ°Ã…Â¸Ã‚ÂÃ¢â‚¬Â", shopping: "ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂºÃ¢â‚¬â„¢", utilities: "ÃƒÂ°Ã…Â¸Ã¢â‚¬â„¢Ã‚Â¡", travel: "ÃƒÂ°Ã…Â¸Ã…Â¡Ã¢â‚¬â€",
-  entertainment: "ÃƒÂ°Ã…Â¸Ã…Â½Ã‚Â¬", health: "ÃƒÂ°Ã…Â¸Ã‚ÂÃ‚Â¥", subscriptions: "ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ¢â‚¬Å¾", income: "ÃƒÂ°Ã…Â¸Ã¢â‚¬â„¢Ã‚Â°", other: "ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã‚Â¦",
+  food: "🍕", shopping: "🛒", utilities: "💡", travel: "✈️",
+  entertainment: "🎥", health: "💊", subscriptions: "🔄", income: "💰", other: "📦",
 };
 
 function fmt(n: number) {
@@ -159,7 +159,7 @@ export default function DashboardPage() {
               )}
             </div>
             <p className="text-zinc-400 text-sm">This Month</p>
-            {overview.isLoading ? <Skeleton className="h-8 w-24 bg-zinc-800 mt-1" /> : <p className="text-2xl font-bold text-white mt-1">ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹{fmt(current?.total ?? 0)}</p>}
+            {overview.isLoading ? <Skeleton className="h-8 w-24 bg-zinc-800 mt-1" /> : <p className="text-2xl font-bold text-white mt-1">₹{fmt(current?.total ?? 0)}</p>}
           </CardContent>
         </Card>
 
@@ -169,7 +169,7 @@ export default function DashboardPage() {
               <div className="p-2 rounded-xl bg-emerald-500/10"><CreditCard className="h-5 w-5 text-emerald-500" /></div>
             </div>
             <p className="text-zinc-400 text-sm">Last Month</p>
-            {overview.isLoading ? <Skeleton className="h-8 w-24 bg-zinc-800 mt-1" /> : <p className="text-2xl font-bold text-white mt-1">ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹{fmt(previous?.total ?? 0)}</p>}
+            {overview.isLoading ? <Skeleton className="h-8 w-24 bg-zinc-800 mt-1" /> : <p className="text-2xl font-bold text-white mt-1">₹{fmt(previous?.total ?? 0)}</p>}
           </CardContent>
         </Card>
 
@@ -181,7 +181,7 @@ export default function DashboardPage() {
             <p className="text-zinc-400 text-sm">Savings This Month</p>
             {overview.isLoading ? <Skeleton className="h-8 w-24 bg-zinc-800 mt-1" /> : (
               <p className={`text-2xl font-bold mt-1 ${(current?.savings ?? 0) >= 0 ? "text-emerald-500" : "text-red-400"}`}>
-                ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹{fmt(current?.savings ?? 0)}
+                ₹{fmt(current?.savings ?? 0)}
               </p>
             )}
           </CardContent>
@@ -191,7 +191,7 @@ export default function DashboardPage() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between mb-4">
               <div className="p-2 rounded-xl bg-emerald-500/10"><RefreshCw className="h-5 w-5 text-emerald-500" /></div>
-              {!subs.isLoading && <span className="text-xs text-zinc-500">ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹{fmt(Math.round(subsMonthlyCost))}/mo</span>}
+              {!subs.isLoading && <span className="text-xs text-zinc-500">₹{fmt(Math.round(subsMonthlyCost))}/mo</span>}
             </div>
             <p className="text-zinc-400 text-sm">Active Subs</p>
             {subs.isLoading ? <Skeleton className="h-8 w-12 bg-zinc-800 mt-1" /> : <p className="text-2xl font-bold text-white mt-1">{subs.data?.length ?? 0}</p>}
@@ -218,8 +218,8 @@ export default function DashboardPage() {
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
                     <XAxis dataKey="date" stroke="#71717a" fontSize={12} tickLine={false} axisLine={false} interval={9} />
-                    <YAxis stroke="#71717a" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹${v}`} />
-                    <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #27272a", borderRadius: "8px" }} labelStyle={{ color: "#fff" }} formatter={(value) => [`ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹${value ?? 0}`, "Spent"]} />
+                    <YAxis stroke="#71717a" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `₹${v}`} />
+                    <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #27272a", borderRadius: "8px" }} labelStyle={{ color: "#fff" }} formatter={(value) => [`₹${value ?? 0}`, "Spent"]} />
                     <Area type="monotone" dataKey="amount" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#colorAmount)" />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -240,7 +240,7 @@ export default function DashboardPage() {
                     <Pie data={categoryData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={4} dataKey="value">
                       {categoryData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
                     </Pie>
-                    <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #27272a", borderRadius: "8px" }} formatter={(value) => [`ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹${value ?? 0}`, ""]} />
+                    <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #27272a", borderRadius: "8px" }} formatter={(value) => [`₹${value ?? 0}`, ""]} />
                     <Legend layout="vertical" align="right" verticalAlign="middle" iconType="circle" iconSize={8} formatter={(value) => <span className="text-zinc-400 text-xs">{value}</span>} />
                   </PieChart>
                 </ResponsiveContainer>
@@ -276,7 +276,7 @@ export default function DashboardPage() {
                       </div>
                     </div>
                     <span className={`font-semibold text-sm ${tx.type === "credit" ? "text-emerald-500" : "text-red-400"}`}>
-                      {tx.type === "credit" ? "+" : "-"}ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹{fmt(Number(tx.amount))}
+                      {tx.type === "credit" ? "+" : "-"}₹{fmt(Number(tx.amount))}
                     </span>
                   </div>
                 ))}
@@ -301,7 +301,7 @@ export default function DashboardPage() {
                   {subs.data.slice(0, 4).map((s) => (
                     <div key={s.id} className="flex items-center justify-between">
                       <p className="text-white text-sm truncate max-w-[130px]">{s.merchant}</p>
-                      <span className="text-zinc-400 text-sm">ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹{fmt(Math.round(Number(s.avgAmount)))}</span>
+                      <span className="text-zinc-400 text-sm">₹{fmt(Math.round(Number(s.avgAmount)))}</span>
                     </div>
                   ))}
                 </div>
@@ -322,7 +322,7 @@ export default function DashboardPage() {
               ) : aiRec.isError || !aiRec.data ? (
                 <div className="text-center py-2">
                   <p className="text-zinc-500 text-xs">Upload data for AI insights</p>
-                  <Button variant="ghost" size="sm" onClick={() => router.push("/insights")} className="text-emerald-500 hover:text-emerald-400 mt-1 text-xs">Open AI Chat ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢</Button>
+                  <Button variant="ghost" size="sm" onClick={() => router.push("/insights")} className="text-emerald-500 hover:text-emerald-400 mt-1 text-xs">Open AI Chat →</Button>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -330,11 +330,11 @@ export default function DashboardPage() {
                     <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
                       <p className="text-amber-400 text-xs font-medium">Top Leak Detected</p>
                       <p className="text-white text-sm mt-1">{aiRec.data.topLeaks[0].merchant}</p>
-                      <p className="text-zinc-400 text-xs mt-0.5">Save ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹{fmt(aiRec.data.topLeaks[0].estimatedMonthlySavings)}/mo</p>
+                      <p className="text-zinc-400 text-xs mt-0.5">Save ₹{fmt(aiRec.data.topLeaks[0].estimatedMonthlySavings)}/mo</p>
                     </div>
                   )}
                   {aiRec.data.actionChecklist[0] && <p className="text-zinc-400 text-xs">{aiRec.data.actionChecklist[0]}</p>}
-                  <Button variant="ghost" size="sm" onClick={() => router.push("/insights")} className="w-full text-emerald-500 hover:text-emerald-400 text-xs border border-emerald-500/20">Ask follow-up ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢</Button>
+                  <Button variant="ghost" size="sm" onClick={() => router.push("/insights")} className="w-full text-emerald-500 hover:text-emerald-400 text-xs border border-emerald-500/20">Ask follow-up →</Button>
                 </div>
               )}
             </CardContent>
