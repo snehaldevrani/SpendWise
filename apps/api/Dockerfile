@@ -9,8 +9,11 @@ COPY packages/ ./packages/
 COPY apps/api/package.json ./apps/api/
 COPY tsconfig.base.json ./
 
-# Install ALL deps (including devDeps needed for tsc)
-RUN npm ci --workspace=apps/api --include-workspace-root
+# Install ALL workspace deps (shared-types needs tsc to build)
+RUN npm ci --include-workspace-root
+
+# Build shared-types so @spendwise/shared-types resolves at compile time
+RUN npm run build --workspace=packages/shared-types
 
 # Copy full source
 COPY apps/api/ ./apps/api/
@@ -38,6 +41,7 @@ RUN npm ci --workspace=apps/api --include-workspace-root --omit=dev && npm cache
 
 # Copy compiled output and Prisma artefacts from builder
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
+COPY --from=builder /app/packages/shared-types/dist ./packages/shared-types/dist
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY apps/api/prisma ./apps/api/prisma
 
