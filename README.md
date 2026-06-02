@@ -358,7 +358,7 @@ Key endpoints:
 | `POST` | `/api/budgets` | Create or update a budget |
 | `DELETE` | `/api/budgets/:id` | Remove a budget |
 | `GET` | `/api/insights` | Weekly insight cards |
-| `GET` | `/api/ai/recommendations` | Claude Sonnet savings advice |
+| `GET` | `/api/ai/recommendations` | Gemini 2.5 Flash savings advice (cached 6h, rate-limited 4/day) |
 | `POST` | `/api/ai/chat` | RAG-augmented AI chat |
 | `GET` | `/api/users/preferences` | Notification settings |
 | `PATCH` | `/api/users/preferences` | Update notification settings |
@@ -372,6 +372,57 @@ Key endpoints:
 npm test --workspace=apps/api
 ```
 
+---
+
+## Deployment (free tier)
+
+The recommended zero-cost production stack:
+
+| Service | Platform | What runs there |
+|---------|----------|-----------------|
+| Frontend | [Vercel](https://vercel.com) | Next.js app |
+| API | [Render](https://render.com) Web Service | NestJS + auto-migrate on startup |
+| Worker | [Render](https://render.com) Background Worker | BullMQ import processor |
+| Postgres | [Neon](https://neon.tech) | PostgreSQL 16 + pgvector |
+| Redis | [Upstash](https://upstash.com) | Redis 7 |
+
+> Render free tier spins down after 15 min of inactivity — first request may take ~30 s. Acceptable for portfolio/demo use.
+
+### Environment variables (Render API + Worker)
+
+```env
+DATABASE_URL=<neon postgres connection string>
+REDIS_URL=<upstash rediss:// url>
+JWT_SECRET=<32+ char random string>
+JWT_EXPIRES_IN=15m
+JWT_REFRESH_SECRET=<32+ char random string>
+JWT_REFRESH_EXPIRES_IN=7d
+GEMINI_API_KEY=<from aistudio.google.com/apikey>
+NODE_ENV=production
+PORT=3001
+FRONTEND_URL=https://<your-vercel-url>.vercel.app
+```
+
+`RESEND_API_KEY` and `RESEND_FROM_EMAIL` are optional — the app starts and runs fully without them (email alerts are silently skipped).
+
+### Vercel environment variable
+
+```env
+NEXT_PUBLIC_API_URL=https://<your-render-api-url>/api
+```
+
+### Deploy order
+
+1. **Neon** — create project → run `CREATE EXTENSION IF NOT EXISTS vector;` in SQL editor → copy `DATABASE_URL`
+2. **Upstash** — create Redis database → copy `REDIS_URL`
+3. **Render API** — new Web Service → Docker → Dockerfile `apps/api/Dockerfile` → set env vars → deploy → copy service URL
+4. **Render Worker** — new Background Worker → same repo/Dockerfile → override start command: `node apps/api/dist/worker.js` → same env vars
+5. **Vercel** — import repo → root directory `apps/web` → set `NEXT_PUBLIC_API_URL` → deploy → copy Vercel URL → update `FRONTEND_URL` on both Render services
+
+The API container runs `prisma migrate deploy` automatically on every startup, so the Neon schema is always in sync with the code.
+
+---
+
 7 test suites · 90 tests · 100% pass rate
 
 | Suite | Coverage |
@@ -381,6 +432,6 @@ npm test --workspace=apps/api
 | `subscription-detector.service.spec.ts` | Weekly/monthly/annual detection, confidence scoring, edge cases |
 | `insights.service.spec.ts` | ISO week grouping, category aggregation, credit exclusion, merchant ranking |
 | `transactions.controller.spec.ts` | Pagination, search clamping, userId guard, filter pass-through |
-| `ai.service.spec.ts` | Cache hit, rate limiting, Anthropic mock, context injection, malformed response handling |
+| `ai.service.spec.ts` | Cache hit, rate limiting, Gemini mock, context injection, malformed response handling |
 | `uploads.service.spec.ts` | Magic byte validation, full import flow, duplicate skipping, job enqueueing, cache busting |
 

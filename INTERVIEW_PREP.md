@@ -363,7 +363,7 @@ Explain the full cookie flow: signup ? tokens set as httpOnly cookies ? every AP
 | httpOnly cookie | Browser-managed cookie inaccessible to JavaScript — eliminates token-theft XSS |
 | SameSite=Lax | Blocks cross-site POST requests from including the cookie — mitigates CSRF |
 | Refresh token rotation | Old token deleted on every use — stolen tokens invalidated after one legitimate refresh |
-| Voyage AI voyage-3-lite | 512-dim embedding model, optimised for short multilingual text like transaction descriptions |
+| Gemini `gemini-embedding-2` | 768-dim matryoshka embedding model — native 3072-dim truncated to 768 via `outputDimensionality`; works with the existing pgvector schema |
 | Subscription confidence | stddev-based score measuring how closely a merchant's charge intervals match a known billing cycle |
 | ISO week grouping | Monday-anchored week boundaries — ensures consistent weekly spend summaries |
 | Turborepo | Monorepo build system — runs api and web concurrently with shared TypeScript types |
@@ -392,3 +392,41 @@ Explain the full cookie flow: signup ? tokens set as httpOnly cookies ? every AP
 **"Why did you build SpendWise?"**
 
 > "Indian bank apps export transaction history only as PDFs or CSVs — there's no API. But the raw data is rich: you can detect Netflix, Spotify, gym memberships, insurance premiums all hiding in your statement. I wanted to build a system that actually reads that data and tells you what's leaking. The RAG chat was an interesting engineering problem — how do you let an AI answer questions about data it's never seen? That led me to embeddings and pgvector."
+
+---
+
+## Part 9: Deployment
+
+### 3.9 Production Stack
+
+**Q: How is SpendWise deployed?**
+
+> Frontend on **Vercel** (Next.js). API and Worker as Docker containers on **Render** (free Web Service + Background Worker). PostgreSQL on **Neon** (serverless Postgres with pgvector). Redis on **Upstash**. Total cost: $0.
+
+**Q: Why Render over Railway or Fly.io?**
+
+> Render has a free tier for both web services and background workers with no credit card required. The trade-off is a ~30 second cold start after 15 minutes of inactivity — acceptable for a portfolio project. Railway's free tier was removed; Fly.io requires a credit card. For a paying product I'd use Railway ($5/month) for always-on containers.
+
+**Q: How does the database schema get applied in production?**
+
+> The API Dockerfile's `CMD` runs `prisma migrate deploy` before starting the server. This means every deployment automatically applies any pending migrations against the production database. No manual step needed, no risk of schema drift.
+
+**Q: Why Neon for Postgres?**
+
+> Neon is the only free-tier managed Postgres provider that ships with `pgvector` support. Supabase also has pgvector but their free tier pauses after 1 week of inactivity. Neon's free tier stays active as long as you have recent queries — better fit for a demo app.
+
+**Q: Why Upstash for Redis?**
+
+> Upstash is the only serverless Redis with a meaningful free tier (10,000 commands/day). It's HTTP-based under the hood but exposes a standard Redis API — `ioredis` connects to it without any changes.
+
+**Q: How does the worker run separately from the API?**
+
+> The repo has two entry points: `main.ts` (HTTP server) and `worker.ts` (BullMQ processor). Both compile into `dist/`. On Render, the API service runs `node apps/api/dist/main` (default Dockerfile CMD) and the Worker service overrides the start command to `node apps/api/dist/worker.js`. They share the same Redis and Postgres but are independent processes — a crash in one doesn't affect the other.
+
+**Q: How do the frontend and API handle cross-origin cookies in production?**
+
+> Vercel and Render are on different domains, so cookies must be `SameSite=None; Secure`. The auth controller checks `NODE_ENV === 'production'` and sets those flags automatically. In development, `SameSite=Lax` is used — no HTTPS needed.
+
+**Q: What environment variables does the production deployment need?**
+
+> `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `GEMINI_API_KEY`, `FRONTEND_URL`, `NODE_ENV=production`, `PORT=3001`. `RESEND_API_KEY` is optional — the app starts and runs without it; email alerts are silently skipped.
