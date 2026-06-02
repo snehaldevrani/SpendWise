@@ -6,6 +6,10 @@ Upload your bank statement once. SpendWise automatically categorises every trans
 
 > Built with NestJS · Next.js 15 · PostgreSQL + pgvector · Redis · Google Gemini 2.5 Flash
 
+**Live demo:** [spendwise-web-nine.vercel.app](https://spendwise-web-nine.vercel.app) &nbsp;|&nbsp; **API:** [spendwise-api-q01j.onrender.com/api/docs](https://spendwise-api-q01j.onrender.com/api/docs)
+
+> The Render free tier spins down after 15 min of inactivity — first request may take ~30 s.
+
 ---
 
 ## Features
@@ -157,16 +161,16 @@ DATABASE_URL="postgresql://user:password@localhost:5432/spendwise?schema=public"
 REDIS_URL="redis://localhost:6379"
 JWT_SECRET="<min 32 chars>"
 JWT_REFRESH_SECRET="<min 32 chars>"
-GEMINI_API_KEY="AQ..."
-RESEND_API_KEY="re_..."
+GEMINI_API_KEY="AIzaSy..."          # from aistudio.google.com/apikey — starts with AIzaSy
+RESEND_API_KEY="re_..."             # optional — app works without it
 RESEND_FROM_EMAIL="alerts@yourdomain.com"
 FRONTEND_URL="http://localhost:3000"
 PORT=3001
 ```
 
 API keys:
-- **Google Gemini** — [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
-- **Resend** — [resend.com](https://resend.com)
+- **Google Gemini** — [aistudio.google.com/apikey](https://aistudio.google.com/apikey) (free tier)
+- **Resend** — [resend.com](https://resend.com) (optional, for email alerts)
 
 ### 3. Set up the database
 
@@ -378,17 +382,18 @@ npm test --workspace=apps/api
 
 The recommended zero-cost production stack:
 
-| Service | Platform | What runs there |
-|---------|----------|-----------------|
-| Frontend | [Vercel](https://vercel.com) | Next.js app |
-| API | [Render](https://render.com) Web Service | NestJS + auto-migrate on startup |
-| Worker | [Render](https://render.com) Background Worker | BullMQ import processor |
-| Postgres | [Neon](https://neon.tech) | PostgreSQL 16 + pgvector |
-| Redis | [Upstash](https://upstash.com) | Redis 7 |
+| Service | Platform | What runs there | URL |
+|---------|----------|-----------------|-----|
+| Frontend | [Vercel](https://vercel.com) | Next.js app | [spendwise-web-nine.vercel.app](https://spendwise-web-nine.vercel.app) |
+| API | [Render](https://render.com) Web Service | NestJS + BullMQ workers + auto-migrate on startup | [spendwise-api-q01j.onrender.com](https://spendwise-api-q01j.onrender.com) |
+| Postgres | [Neon](https://neon.tech) | PostgreSQL 16 + pgvector | — |
+| Redis | [Upstash](https://upstash.com) | Redis 7 (`rediss://` TLS) | — |
+
+> **Note:** BullMQ job processors (`JOB_EMBED_TRANSACTIONS`, `JOB_DETECT_SUBSCRIPTIONS`, `JOB_COMPUTE_INSIGHTS`) run inside the API process — no separate worker service required. The `worker.ts` entry point exists for scale-out if needed.
 
 > Render free tier spins down after 15 min of inactivity — first request may take ~30 s. Acceptable for portfolio/demo use.
 
-### Environment variables (Render API + Worker)
+### Environment variables (Render API service)
 
 ```env
 DATABASE_URL=<neon postgres connection string>
@@ -397,7 +402,7 @@ JWT_SECRET=<32+ char random string>
 JWT_EXPIRES_IN=15m
 JWT_REFRESH_SECRET=<32+ char random string>
 JWT_REFRESH_EXPIRES_IN=7d
-GEMINI_API_KEY=<from aistudio.google.com/apikey>
+GEMINI_API_KEY=<from aistudio.google.com/apikey — starts with AIzaSy>
 NODE_ENV=production
 PORT=3001
 FRONTEND_URL=https://<your-vercel-url>.vercel.app
@@ -413,11 +418,10 @@ NEXT_PUBLIC_API_URL=https://<your-render-api-url>/api
 
 ### Deploy order
 
-1. **Neon** — create project → run `CREATE EXTENSION IF NOT EXISTS vector;` in SQL editor → copy `DATABASE_URL`
+1. **Neon** — create project → copy `DATABASE_URL` (pgvector is pre-installed)
 2. **Upstash** — create Redis database → copy `REDIS_URL`
-3. **Render API** — new Web Service → Docker → Dockerfile `apps/api/Dockerfile` → set env vars → deploy → copy service URL
-4. **Render Worker** — new Background Worker → same repo/Dockerfile → override start command: `node apps/api/dist/worker.js` → same env vars
-5. **Vercel** — import repo → root directory `apps/web` → set `NEXT_PUBLIC_API_URL` → deploy → copy Vercel URL → update `FRONTEND_URL` on both Render services
+3. **Render API** — new Web Service → Docker → Dockerfile path `./apps/api/Dockerfile` → set all env vars → deploy → copy service URL
+4. **Vercel** — import repo → root directory `apps/web` → set `NEXT_PUBLIC_API_URL` → deploy → copy Vercel URL → update `FRONTEND_URL` on Render
 
 The API container runs `prisma migrate deploy` automatically on every startup, so the Neon schema is always in sync with the code.
 

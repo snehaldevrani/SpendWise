@@ -190,10 +190,11 @@ Cost. Anthropic has no meaningful free tier — you pay per input+output token. 
 `gemini-embedding-2` natively outputs **3072-dim** vectors. To keep the DB schema and HNSW index lightweight, I pass `outputDimensionality: 768` in the SDK call:
 
 ```typescript
-const result = await model.embedContent({
-  content: { role: 'user', parts: [{ text }] },
+const request = {
+  content: { role: 'user', parts: [{ text }] } as { role: string; parts: { text: string }[] },
   outputDimensionality: 768,
-} as any);
+};
+const result = await model.embedContent(request as Parameters<typeof model.embedContent>[0]);
 ```
 
 This uses **matryoshka representation learning** — the first N dimensions of a longer embedding are trained to be independently meaningful. So the first 768 dims of a 3072-dim vector carry nearly the same semantic information as a native 768-dim model. You get compact storage and fast search without sacrificing retrieval quality.
@@ -314,11 +315,53 @@ Key cross-module wiring:
 
 ---
 
+### 3.9 Data Storage & Security
+
+This section is critical for a fintech project — interviewers will probe it directly.
+
+**Where user data lives:**
+
+| Data | Storage | Protection |
+|------|---------|-----------|
+| Passwords | Neon PostgreSQL | `bcrypt` hashed, cost factor 12 — plaintext never stored |
+| Refresh tokens | Neon PostgreSQL | `bcrypt` hashed before insert — a leaked DB row cannot be replayed |
+| Transactions (merchant, amount, category, date) | Neon PostgreSQL | Plain rows — Neon encrypts the volume at rest (AES-256) |
+| Transaction embeddings | Neon PostgreSQL (pgvector column) | Same volume encryption |
+| JWT access tokens | httpOnly SameSite=Lax cookie | Not accessible to JavaScript; cannot be stolen via XSS |
+| Sessions / rate limit counters | Upstash Redis | In-memory, no PII |
+
+**In transit:**
+- All API traffic over HTTPS — Render terminates TLS
+- Frontend on HTTPS — Vercel
+- Redis over `rediss://` TLS (Upstash requires it; ioredis connects with `tls: { rejectUnauthorized: false }`)
+- Database over SSL (`sslmode=require` in the Neon connection string)
+
+**Access control:**
+- Every endpoint requires a valid JWT — no route is publicly readable
+- Every Prisma query filters by `userId` — no cross-user data access is architecturally possible
+- CORS locked to the Vercel frontend URL via `FRONTEND_URL` env var
+
+**What Gemini receives:**
+Transaction descriptions, amounts, categories, and dates are sent to Google's Gemini API as plain text in prompts. No user email, name, or password is ever sent. This is the main privacy trade-off:
+
+**Interview question:**
+> "You're sending financial transaction data to a third-party AI. Isn't that a privacy concern?"
+
+**Your answer:**
+> "Yes, and it's a deliberate trade-off I'd address in a production product. What Gemini sees is anonymised financial records — merchant name, amount, category, date. No user identity (email, name, address) is included in the prompt. Google's standard API terms of service cover this usage. A stronger production approach would be a locally-hosted embedding model (e.g. a quantised sentence-transformer) so no financial text leaves the infrastructure at all. For a demo project, the Google AI Studio free tier with standard data handling is an acceptable starting point. I've documented this trade-off explicitly."
+
+**What's NOT done (and why that's fine to say):**
+- No column-level encryption on the `transactions` table — Neon's volume encryption covers the data at rest; column-level encryption would require application-layer decryption on every query, adding latency and complexity not justified at this scale
+- No PII scrubbing pipeline before Gemini calls — worth adding for production with real users
+- No data residency controls — Neon and Render run in US regions; relevant if building for EU users (GDPR)
+
+---
+
 ## Part 4: Questions They Will Ask
 
 **"Walk me through your tech stack choices."**
 
-> "Frontend: Next.js 15 with the App Router — all pages are client components using TanStack Query for data fetching, so the UX stays snappy with background refetching and cache invalidation. Backend: NestJS because I wanted strong TypeScript, DI, and module boundaries. Database: PostgreSQL because I needed both relational queries and vector search in one place — pgvector handles both. Redis for BullMQ job queue persistence — jobs survive server restarts. Claude Sonnet 4.6 for AI because its structured output and tool use are the most reliable. Voyage AI for embeddings specifically because they outperform OpenAI's ada-002 on retrieval benchmarks for multilingual and short-text tasks, which matters for transaction descriptions. I also built an MCP server so Claude Desktop can query SpendWise natively — that required extending the JWT strategy to accept Bearer tokens in addition to cookies."
+> "Frontend: Next.js 15 with the App Router — all pages are client components using TanStack Query for data fetching, so the UX stays snappy with background refetching and cache invalidation. Backend: NestJS because I wanted strong TypeScript, DI, and module boundaries. Database: PostgreSQL because I needed both relational queries and vector search in one place — pgvector handles both. Redis for BullMQ job queue persistence — jobs survive server restarts. Google Gemini 2.5 Flash for AI chat and recommendations — it's competitive with GPT-4o-mini and the free tier is generous enough for a real product. Gemini embedding-2 for vector embeddings at 768 dims. I also built an MCP server so Claude Desktop can query SpendWise natively — that required extending the JWT strategy to accept Bearer tokens in addition to cookies."
 
 **"How does your auth work?"**
 
