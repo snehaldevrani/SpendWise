@@ -11,10 +11,12 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit() {
     const redisUrl = this.config.get<string>('REDIS_URL', 'redis://localhost:6379');
+    const tls = redisUrl.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined;
     this.client = new Redis(redisUrl, {
       maxRetriesPerRequest: 3,
       lazyConnect: true,
       enableOfflineQueue: false,
+      tls,
     });
     this.client.on('error', (err) => this.logger.warn(`Redis cache error: ${err.message}`));
   }

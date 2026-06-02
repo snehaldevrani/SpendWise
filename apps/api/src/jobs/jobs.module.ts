@@ -15,10 +15,14 @@ import { IMPORT_QUEUE } from './queue.constants';
       imports: [ConfigModule],
       useFactory: (config: ConfigService) => {
         const redisUrl = new URL(config.get('REDIS_URL', 'redis://localhost:6379'));
+        const tls = redisUrl.protocol === 'rediss:' ? { rejectUnauthorized: false } : undefined;
         return {
           connection: {
             host: redisUrl.hostname,
             port: parseInt(redisUrl.port || '6379', 10),
+            username: redisUrl.username || undefined,
+            password: redisUrl.password || undefined,
+            tls,
             maxRetriesPerRequest: null,
           },
         };
