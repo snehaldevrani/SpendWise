@@ -20,10 +20,13 @@ export class RagService {
   }
 
   private async embedTexts(texts: string[]): Promise<number[][]> {
-    const model = this.genAI.getGenerativeModel({ model: 'text-embedding-004' });
+    const model = this.genAI.getGenerativeModel({ model: 'gemini-embedding-2' });
     const results: number[][] = [];
     for (const text of texts) {
-      const result = await model.embedContent(text);
+      const result = await model.embedContent({
+        content: { role: 'user', parts: [{ text }] },
+        outputDimensionality: 768,
+      } as any);
       results.push(result.embedding.values);
     }
     return results;
