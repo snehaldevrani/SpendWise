@@ -23,10 +23,13 @@ export class RagService {
     const model = this.genAI.getGenerativeModel({ model: 'gemini-embedding-2' });
     const results: number[][] = [];
     for (const text of texts) {
-      const result = await model.embedContent({
-        content: { role: 'user', parts: [{ text }] },
-        outputDimensionality: 768,
-      } as any);
+      // outputDimensionality is a valid API parameter not yet reflected in the SDK types;
+      // using a typed cast instead of `as any` for safety.
+      const request = {
+        content: { role: 'user', parts: [{ text }] } as { role: string; parts: { text: string }[] },
+        outputDimensionality: EMBEDDING_DIMS,
+      };
+      const result = await model.embedContent(request as Parameters<typeof model.embedContent>[0]);
       results.push(result.embedding.values);
     }
     return results;

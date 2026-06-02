@@ -110,7 +110,7 @@ export function UploadDialog() {
   };
 
   return (
-    <Dialog open={uploadDialogOpen} onOpenChange={close}>
+    <Dialog open={uploadDialogOpen} onOpenChange={(open) => { if (!open && state !== 'uploading') close(); }}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="text-base font-semibold">Import Bank Statement</DialogTitle>

@@ -23,17 +23,18 @@ export class AiService {
   }
 
   async getRecommendations(userId: string): Promise<AiRecommendation> {
-    // Per-user rate limit
+    // Cache hit — check BEFORE incrementing the rate limit counter so that
+    // cached responses don't consume daily quota on every dashboard load.
+    const cacheKey = `ai:recs:${userId}`;
+    const cached = await this.cache.get<AiRecommendation>(cacheKey);
+    if (cached) return cached;
+
+    // Per-user rate limit — only reached on cache miss (actual Gemini call)
     const rateLimitKey = `ai:recs:rate:${userId}`;
     const count = await this.cache.incr(rateLimitKey, RATE_WINDOW);
     if (count > RECS_RATE_LIMIT) {
       throw new HttpException('AI recommendation limit reached for today. Try again tomorrow.', HttpStatus.TOO_MANY_REQUESTS);
     }
-
-    // Cache hit
-    const cacheKey = `ai:recs:${userId}`;
-    const cached = await this.cache.get<AiRecommendation>(cacheKey);
-    if (cached) return cached;
 
     const stats = await this.buildUserStats(userId);
 
