@@ -48,4 +48,6 @@ USER spendwise
 
 EXPOSE 3001
 
-CMD ["sh", "-c", "node apps/api/dist/main"]
+# Run migrations then start the server. Using npx prisma so the CLI doesn't
+# need to be a runtime dep — it resolves from the installed prisma package.
+CMD ["sh", "-c", "node apps/api/node_modules/.bin/prisma migrate deploy --schema=apps/api/prisma/schema.prisma && node apps/api/dist/main"]
