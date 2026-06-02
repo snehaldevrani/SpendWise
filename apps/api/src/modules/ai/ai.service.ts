@@ -38,7 +38,7 @@ export class AiService {
     const stats = await this.buildUserStats(userId);
 
     const model = this.genAI.getGenerativeModel({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-2.5-flash',
       systemInstruction: `You are a personal finance advisor. Analyze the user's spending data and return actionable insights.
 Rules:
 - Provide suggestions, not investment advice or guaranteed outcomes
@@ -134,7 +134,7 @@ ${txnLines}`;
       : '';
 
     const model = this.genAI.getGenerativeModel({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-2.5-flash',
       systemInstruction: `You are a personal finance assistant. Answer questions about the user's spending using ONLY the provided transaction data.
 The COMPLETE TRANSACTION LIST contains every transaction — use it for all factual queries (largest, total, count, by category, etc.).
 Be concise and accurate. Never guess or approximate when the exact data is present.`,
