@@ -235,7 +235,7 @@ export default function TransactionsPage() {
                           </Badge>
                         </TableCell>
                         <TableCell className={`text-right font-semibold ${tx.type === "credit" ? "text-emerald-500" : "text-red-400"}`}>
-                          {tx.type === "credit" ? "+" : "-"}â‚¹{Math.abs(Number(tx.amount)).toLocaleString("en-IN")}
+                          {tx.type === "credit" ? "+" : "-"}Rs.{Math.abs(Number(tx.amount)).toLocaleString("en-IN")}
                         </TableCell>
                       </TableRow>
                     ))}

@@ -160,15 +160,11 @@ Be concise and accurate. Never guess or approximate when the exact data is prese
   }
 
   private async buildUserStats(userId: string) {
-    const now = new Date();
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-
     const [recentTransactions, subscriptions] = await Promise.all([
       this.prisma.transaction.findMany({
-        where: { userId, date: { gte: thirtyDaysAgo }, type: 'debit' },
+        where: { userId, type: 'debit' },
         select: { merchant: true, amount: true, category: true, date: true },
         orderBy: { amount: 'desc' },
-        take: 50,
       }),
       this.prisma.subscription.findMany({
         where: { userId, dismissed: false },
@@ -191,7 +187,7 @@ Be concise and accurate. Never guess or approximate when the exact data is prese
       }, {});
 
     return {
-      period: 'last 30 days',
+      period: 'all time',
       totalSpend: Math.round(monthlyTotal * 100) / 100,
       categoryBreakdown: categoryTotals,
       topMerchants: Object.entries(topMerchants)
