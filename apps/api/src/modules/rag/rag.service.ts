@@ -1,35 +1,32 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { PrismaService } from '../../common/prisma/prisma.service';
 
 const TOP_K = 8;
-const EMBEDDING_DIMS = 512;
+const EMBEDDING_DIMS = 768;
 
 @Injectable()
 export class RagService {
   private readonly logger = new Logger(RagService.name);
-  private voyageApiKey: string;
+  private genAI: GoogleGenerativeAI;
 
   constructor(
     private prisma: PrismaService,
     private config: ConfigService,
   ) {
-    this.voyageApiKey = this.config.get('VOYAGE_API_KEY', '');
+    this.genAI = new GoogleGenerativeAI(this.config.get('GEMINI_API_KEY', ''));
   }
 
-  private async callVoyageEmbed(texts: string[]): Promise<number[][]> {
-    const response = await fetch('https://api.voyageai.com/v1/embeddings', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.voyageApiKey}`,
-      },
-      body: JSON.stringify({ input: texts, model: 'voyage-3-lite' }),
-    });
-    if (!response.ok) throw new Error(`Voyage API error: ${response.status}`);
-    const json = (await response.json()) as { data: Array<{ embedding: number[] }> };
-    return json.data.map((d) => d.embedding);
+  private async embedTexts(texts: string[]): Promise<number[][]> {
+    const model = this.genAI.getGenerativeModel({ model: 'text-embedding-004' });
+    const results: number[][] = [];
+    for (const text of texts) {
+      const result = await model.embedContent(text);
+      results.push(result.embedding.values);
+    }
+    return results;
   }
 
   async embedTransactions(userId: string, transactionIds: string[]): Promise<void> {
@@ -46,7 +43,7 @@ export class RagService {
     );
 
     try {
-      const embeddings = await this.callVoyageEmbed(texts);
+      const embeddings = await this.embedTexts(texts);
 
       for (let i = 0; i < txns.length; i++) {
         const embedding = embeddings[i];
@@ -76,7 +73,7 @@ export class RagService {
   async search(userId: string, query: string, topK = TOP_K): Promise<string[]> {
     let queryEmbedding: number[];
     try {
-      const embeddings = await this.callVoyageEmbed([query]);
+      const embeddings = await this.embedTexts([query]);
       queryEmbedding = embeddings[0] ?? [];
     } catch (err) {
       this.logger.error('Failed to embed query', err);

@@ -56,13 +56,15 @@ export class AuthController {
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const refreshToken = req.cookies?.refresh_token as string | undefined;
     if (refreshToken) await this.authService.logout(refreshToken);
-    res.clearCookie('access_token', { path: '/' });
-    res.clearCookie('refresh_token', { path: '/' });
+    const isProd = process.env.NODE_ENV === 'production';
+    const clearOpts = { path: '/', secure: isProd, sameSite: (isProd ? 'none' : 'lax') as 'none' | 'lax' };
+    res.clearCookie('access_token', clearOpts);
+    res.clearCookie('refresh_token', clearOpts);
   }
 
   private setAuthCookies(res: Response, tokens: AuthTokens): void {
     const isProd = process.env.NODE_ENV === 'production';
-    const base = { httpOnly: true, secure: isProd, sameSite: 'lax' as const, path: '/' };
+    const base = { httpOnly: true, secure: isProd, sameSite: (isProd ? 'none' : 'lax') as 'none' | 'lax', path: '/' };
     res.cookie('access_token', tokens.accessToken, { ...base, maxAge: ACCESS_TOKEN_TTL_MS });
     res.cookie('refresh_token', tokens.refreshToken, { ...base, maxAge: REFRESH_TOKEN_TTL_MS });
   }

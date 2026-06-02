@@ -1,6 +1,6 @@
 import { Injectable, ServiceUnavailableException, HttpException, HttpStatus } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { AiRecommendation } from '@spendwise/shared-types';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CacheService } from '../../common/cache/cache.service';
@@ -12,14 +12,14 @@ const RATE_WINDOW = 24 * 60 * 60;        // 24 hours
 
 @Injectable()
 export class AiService {
-  private client: Anthropic;
+  private genAI: GoogleGenerativeAI;
 
   constructor(
     private prisma: PrismaService,
     private config: ConfigService,
     private cache: CacheService,
   ) {
-    this.client = new Anthropic({ apiKey: this.config.get('ANTHROPIC_API_KEY') });
+    this.genAI = new GoogleGenerativeAI(this.config.get('GEMINI_API_KEY', ''));
   }
 
   async getRecommendations(userId: string): Promise<AiRecommendation> {
@@ -37,20 +37,19 @@ export class AiService {
 
     const stats = await this.buildUserStats(userId);
 
-    const message = await this.client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 1024,
-      system: `You are a personal finance advisor. Analyze the user's spending data and return actionable insights.
+    const model = this.genAI.getGenerativeModel({
+      model: 'gemini-2.0-flash',
+      systemInstruction: `You are a personal finance advisor. Analyze the user's spending data and return actionable insights.
 Rules:
 - Provide suggestions, not investment advice or guaranteed outcomes
 - Show reasoning based only on the provided data
 - If data is insufficient, say so in uncertaintyNotes
 - Be specific with merchant names from the data
 - Return valid JSON only, no markdown`,
-      messages: [
-        {
-          role: 'user',
-          content: `Analyze this user's financial data and return a JSON object with this exact schema:
+      generationConfig: { responseMimeType: 'application/json' },
+    });
+
+    const prompt = `Analyze this user's financial data and return a JSON object with this exact schema:
 {
   "topLeaks": [
     { "merchant": "string", "reason": "string", "estimatedMonthlySavings": number }
@@ -63,16 +62,10 @@ Rules:
 User data:
 ${JSON.stringify(stats, null, 2)}
 
-Return ONLY the JSON object, no explanation.`,
-        },
-      ],
-    });
+Return ONLY the JSON object, no explanation.`;
 
-    const raw = message.content[0];
-    if (raw.type !== 'text') throw new ServiceUnavailableException('Unexpected AI response type');
-
-    // Strip markdown fences if Claude wraps the JSON
-    const jsonText = raw.text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
+    const result = await model.generateContent(prompt);
+    const jsonText = result.response.text().trim();
 
     try {
       const parsed = JSON.parse(jsonText) as AiRecommendation;
@@ -140,23 +133,15 @@ ${txnLines}`;
       ? `\nAdditional semantic matches:\n${contextChunks.join('\n')}`
       : '';
 
-    const message = await this.client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 1024,
-      system: `You are a personal finance assistant. Answer questions about the user's spending using ONLY the provided transaction data.
+    const model = this.genAI.getGenerativeModel({
+      model: 'gemini-2.0-flash',
+      systemInstruction: `You are a personal finance assistant. Answer questions about the user's spending using ONLY the provided transaction data.
 The COMPLETE TRANSACTION LIST contains every transaction — use it for all factual queries (largest, total, count, by category, etc.).
 Be concise and accurate. Never guess or approximate when the exact data is present.`,
-      messages: [
-        {
-          role: 'user',
-          content: `${structuredContext}${ragContext}\n\nQuestion: ${question}`,
-        },
-      ],
     });
 
-    const raw = message.content[0];
-    if (raw.type !== 'text') throw new ServiceUnavailableException('Unexpected AI response');
-    return raw.text;
+    const result = await model.generateContent(`${structuredContext}${ragContext}\n\nQuestion: ${question}`);
+    return result.response.text();
   }
 
   private async buildUserStats(userId: string) {

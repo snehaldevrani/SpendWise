@@ -67,8 +67,8 @@ model Transaction {
   rawText  String          @map("raw_text")
   dedupKey String          @map("dedup_key")
 
-  // pgvector — 512 dims (Voyage AI voyage-3-lite)
-  embedding Unsupported("vector(512)")?
+  // pgvector — 768 dims (Google text-embedding-004)
+  embedding Unsupported("vector(768)")?
 
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -134,7 +134,7 @@ model DocumentChunk {
   chunkText  String @map("chunk_text")
   chunkIndex Int    @map("chunk_index")
 
-  embedding Unsupported("vector(512)")?
+  embedding Unsupported("vector(768)")?
 
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
