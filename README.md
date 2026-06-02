@@ -4,7 +4,7 @@
 
 Upload your bank statement once. SpendWise automatically categorises every transaction, detects recurring subscription charges, computes weekly spending summaries, lets you set monthly budgets, and gives you an AI assistant that answers questions grounded in your *own* transaction history — not generic advice.
 
-> Built with NestJS · Next.js 15 · PostgreSQL + pgvector · Redis · Claude Sonnet 4.6 · Voyage AI
+> Built with NestJS · Next.js 15 · PostgreSQL + pgvector · Redis · Google Gemini 2.5 Flash
 
 ---
 
@@ -18,7 +18,7 @@ Upload your bank statement once. SpendWise automatically categorises every trans
 | **Monthly budgets** | Set per-category spending limits; live progress bars, prorated month-end forecast, health score |
 | **6-month category trends** | Stacked bar chart showing month-by-month spend across all categories |
 | **Weekly spending summaries** | ISO-week groupings with total spend, income, category breakdown, top merchants |
-| **RAG AI chat** | Ask questions about your own finances; Voyage AI embeddings + pgvector cosine search provides supplemental context; full transaction history injected into every prompt for factually accurate answers |
+| **RAG AI chat** | Ask questions about your own finances; Gemini `gemini-embedding-2` embeddings + pgvector cosine search provides supplemental context; full transaction history injected into every prompt for factually accurate answers |
 | **AI recommendations** | Structured savings recommendations: top leaks, estimated monthly savings, action checklist — Redis-cached 6h, per-user rate limited |
 | **Weekly email digest** | Every Monday: last week's spend, income, net savings, top categories and merchants — opt-in via Settings |
 | **Email alerts** | New subscription leak detected → immediate notification |
@@ -32,17 +32,47 @@ Upload your bank statement once. SpendWise automatically categorises every trans
 |-------|-----------|
 | Frontend | Next.js 15.5 (App Router), React 19, TypeScript 5, Tailwind CSS 4, shadcn/ui |
 | Backend | NestJS 10, TypeScript 5, Passport JWT, class-validator |
-| Database | PostgreSQL 16 + pgvector (512-dim, HNSW index) |
+| Database | PostgreSQL 16 + pgvector (768-dim, HNSW index) |
 | ORM | Prisma 5 |
 | Cache / Queue | Redis 7 + BullMQ 5 |
-| AI — chat & recs | Claude Sonnet 4.6 (Anthropic SDK) |
-| AI — embeddings | Voyage AI `voyage-3-lite` (512 dims) |
+| AI — chat & recs | Google Gemini `gemini-2.5-flash` (Google Generative AI SDK) |
+| AI — embeddings | Google Gemini `gemini-embedding-2` (768 dims, matryoshka truncation) |
 | Email | Resend |
 | State | TanStack Query 5, Zustand 5 |
 | Charts | Recharts 3 |
 | Monorepo | Turborepo / npm workspaces |
 | Containers | Docker + Docker Compose |
 | CI | GitHub Actions |
+
+---
+
+## AI Stack — Migration from Claude + Voyage to Gemini
+
+SpendWise originally shipped with **Claude Sonnet 4.6** (Anthropic) for chat and recommendations, and **Voyage AI `voyage-3-lite`** for embeddings. That stack worked well:
+
+- Claude's structured JSON output mode produced reliably parseable recommendation payloads
+- Voyage AI's `voyage-3-lite` model was specifically tuned for short multilingual text, which suited Indian bank transaction descriptions well
+- Embeddings were stored as 512-dim vectors with an HNSW index in pgvector
+
+**Why the migration?**
+
+Cost. Running Claude Sonnet 4.6 at even moderate traffic is expensive — Anthropic charges per input/output token with no free tier. Voyage AI similarly has no meaningful free tier. For a personal project or early-stage product, this was unsustainable.
+
+Google Gemini provides a **generous free tier** via Google AI Studio (`gemini-2.5-flash` and `gemini-embedding-2` are both available on the free plan), which made the switch an easy cost-cutting decision without compromising capability.
+
+**What changed:**
+
+| Component | Before | After |
+|-----------|--------|-------|
+| Chat / Recommendations | Claude Sonnet 4.6 (Anthropic SDK) | `gemini-2.5-flash` (Google Generative AI SDK) |
+| Embeddings | Voyage AI `voyage-3-lite` (512-dim) | `gemini-embedding-2` with `outputDimensionality: 768` |
+| API key env var | `ANTHROPIC_API_KEY` + `VOYAGE_API_KEY` | `GEMINI_API_KEY` (single key) |
+| DB vector column | `vector(512)` | `vector(768)` |
+| SDK | `@anthropic-ai/sdk` + `voyageai` | `@google/generative-ai` |
+
+**Noteworthy engineering detail — matryoshka truncation:** `gemini-embedding-2` natively outputs 3072-dim vectors. The Google SDK accepts an `outputDimensionality` parameter that truncates using matryoshka representation learning — meaning the first N dimensions of a longer embedding preserve the same semantic quality as a native N-dim model. Setting `outputDimensionality: 768` keeps the DB schema lean while retaining strong retrieval quality.
+
+**What stayed the same:** The RAG architecture, pgvector cosine search, HNSW index, BullMQ job pipeline, and all rate-limiting logic are unchanged. The migration was purely a provider swap — no business logic was rewritten.
 
 ---
 
@@ -61,8 +91,8 @@ SpendWise/
 │   │   │   │   ├── subscriptions/  Recurring charge detection + dismiss/confirm
 │   │   │   │   ├── budgets/        Monthly budget CRUD, forecast, health score
 │   │   │   │   ├── insights/       ISO-week summaries, category trends
-│   │   │   │   ├── ai/             Claude Sonnet recs + RAG chat, rate limits
-│   │   │   │   ├── rag/            Voyage AI embeddings, pgvector search
+│   │   │   │   ├── ai/             Gemini 2.5 Flash recs + RAG chat, rate limits
+│   │   │   │   ├── rag/            Gemini embedding-2 (768-dim), pgvector search
 │   │   │   │   └── alerts/         Resend email alerts
 │   │   │   ├── jobs/
 │   │   │   │   ├── import.processor.ts   BullMQ: embed → detect → insights
@@ -127,8 +157,7 @@ DATABASE_URL="postgresql://user:password@localhost:5432/spendwise?schema=public"
 REDIS_URL="redis://localhost:6379"
 JWT_SECRET="<min 32 chars>"
 JWT_REFRESH_SECRET="<min 32 chars>"
-ANTHROPIC_API_KEY="sk-ant-..."
-VOYAGE_API_KEY="pa-..."
+GEMINI_API_KEY="AQ..."
 RESEND_API_KEY="re_..."
 RESEND_FROM_EMAIL="alerts@yourdomain.com"
 FRONTEND_URL="http://localhost:3000"
@@ -136,8 +165,7 @@ PORT=3001
 ```
 
 API keys:
-- **Anthropic** — [console.anthropic.com](https://console.anthropic.com)
-- **Voyage AI** — [dash.voyageai.com](https://dash.voyageai.com)
+- **Google Gemini** — [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
 - **Resend** — [resend.com](https://resend.com)
 
 ### 3. Set up the database
@@ -207,7 +235,7 @@ The file must include at minimum: a **date column**, a **description/narration c
 
 Click **Upload Statement** from the sidebar or dashboard. After upload, three background jobs run:
 
-1. **Embed** — each transaction is embedded with Voyage AI and stored in pgvector
+1. **Embed** — each transaction is embedded with Gemini `gemini-embedding-2` (768-dim) and stored in pgvector
 2. **Detect subscriptions** — recurring charges are scored and flagged
 3. **Compute insights** — weekly summaries are calculated
 
@@ -289,7 +317,7 @@ Toggle email notifications:
 CSV upload
     │
     ├─► JOB_EMBED_TRANSACTIONS
-    │       Generate Voyage AI embeddings → upsert into pgvector
+    │       Generate Gemini gemini-embedding-2 embeddings (768-dim) → upsert into pgvector
     │
     ├─► JOB_DETECT_SUBSCRIPTIONS
     │       Group by merchant → compute interval stddev → score confidence
