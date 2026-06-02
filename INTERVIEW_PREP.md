@@ -416,17 +416,7 @@ Explain the full cookie flow: signup ? tokens set as httpOnly cookies ? every AP
 
 ---
 
-## Part 7: Red Flags to Avoid
-
-1. **Don't say "I used Gemini because it's free"** — say "cost was a factor, but Gemini 2.5 Flash handles structured output reliably and the model quality is competitive. The migration from Claude was a business decision, not a technical compromise."
-2. **Don't hand-wave the RAG pipeline** — be ready to explain exactly what `<=>` does, what 768-dim means, why `outputDimensionality: 768` is different from a 768-dim native model, and why top-5 was chosen
-3. **Don't say tokens are "secure"** — say "httpOnly cookies protect against XSS token theft; SameSite=Lax mitigates CSRF. No system is completely secure."
-4. **Don't claim subscriptions are perfectly detected** — say "confidence ? 0.7 gives reasonable precision; false positives are possible on irregular but frequent merchants, which is why users can manually dismiss detections"
-5. **Don't forget the async angle** — interviewers love asking why you chose a job queue; be ready with the "synchronous = 8 second user wait + timeout risk" answer
-
----
-
-## Part 8: Your Story Arc
+## Part 7: Your Story Arc
 
 **"Tell me about a challenging technical problem in SpendWise."**
 
@@ -438,38 +428,220 @@ Explain the full cookie flow: signup ? tokens set as httpOnly cookies ? every AP
 
 ---
 
-## Part 9: Deployment
+## Part 8: Deployment
 
-### 3.9 Production Stack
+### 9.1 Production Stack Overview
 
-**Q: How is SpendWise deployed?**
+**Q: How is SpendWise deployed and what does it cost?**
 
-> Frontend on **Vercel** (Next.js). API and Worker as Docker containers on **Render** (free Web Service + Background Worker). PostgreSQL on **Neon** (serverless Postgres with pgvector). Redis on **Upstash**. Total cost: $0.
+> Total cost: **$0**. Frontend on **Vercel**. API as a Docker container on **Render** (free Web Service). PostgreSQL on **Neon** (serverless Postgres). Redis on **Upstash** (serverless Redis). Everything uses free tiers.
 
-**Q: Why Render over Railway or Fly.io?**
+---
 
-> Render has a free tier for both web services and background workers with no credit card required. The trade-off is a ~30 second cold start after 15 minutes of inactivity — acceptable for a portfolio project. Railway's free tier was removed; Fly.io requires a credit card. For a paying product I'd use Railway ($5/month) for always-on containers.
+### 9.2 Why Each Platform
 
-**Q: How does the database schema get applied in production?**
+**Q: Why Vercel for the frontend?**
 
-> The API Dockerfile's `CMD` runs `prisma migrate deploy` before starting the server. This means every deployment automatically applies any pending migrations against the production database. No manual step needed, no risk of schema drift.
+> Vercel is the company that builds Next.js — their platform has first-class support for it. Zero-config deployment: point it at the `apps/web` directory, set one env var (`NEXT_PUBLIC_API_URL`), and it builds and deploys automatically on every push to `main`. Free tier is generous (100GB bandwidth/month). The alternative (self-hosting Next.js on Render) would require writing and maintaining a Dockerfile for the frontend too — unnecessary complexity for a side project.
 
-**Q: Why Neon for Postgres?**
+**Q: Why Render for the API?**
 
-> Neon is the only free-tier managed Postgres provider that ships with `pgvector` support. Supabase also has pgvector but their free tier pauses after 1 week of inactivity. Neon's free tier stays active as long as you have recent queries — better fit for a demo app.
+> Render supports deploying Docker containers on a free tier **with no credit card required** — that's rare. Railway removed their free tier. Fly.io requires a credit card. Heroku is paid. Render's free Web Service tier gives you one always-on container slot (with the cold start caveat). For a portfolio project where the goal is "have a live URL to share", Render's free Docker hosting is unmatched.
+
+**Q: Why Neon for PostgreSQL?**
+
+> Two reasons: free tier and `pgvector`. SpendWise needs the `pgvector` extension for storing 768-dim transaction embeddings and running cosine similarity search. Managed Postgres options with pgvector on free tiers are very limited:
+> - **Supabase** has pgvector but pauses the database after 1 week of inactivity — unacceptable for a demo
+> - **Railway** postgres has pgvector but no free tier anymore
+> - **Neon** stays active as long as you make queries and has native pgvector support
+> Neon also provides connection pooling and branching (useful for staging environments), but the main reason is: free + pgvector + always-on.
 
 **Q: Why Upstash for Redis?**
 
-> Upstash is the only serverless Redis with a meaningful free tier (10,000 commands/day). It's HTTP-based under the hood but exposes a standard Redis API — `ioredis` connects to it without any changes.
+> SpendWise needs Redis for two things: BullMQ job queues and rate-limit counters. Upstash is the only **serverless** Redis provider with a meaningful free tier (10,000 commands/day, no credit card). Standard Redis hosting (Redis Cloud, Railway Redis) either pauses or costs money. Upstash is HTTP-based under the hood, but exposes a standard Redis-compatible API — `ioredis` connects to it using the `rediss://` URL (note the extra `s` — that means TLS/SSL). I had to explicitly enable TLS in the ioredis connection config:
+> ```typescript
+> const tls = redisUrl.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined;
+> new Redis(redisUrl, { tls })
+> ```
+> Without that, the connection fails with EPIPE/ECONNRESET.
 
-**Q: How does the worker run separately from the API?**
+---
 
-> The repo has two entry points: `main.ts` (HTTP server) and `worker.ts` (BullMQ processor). Both compile into `dist/`. On Render, the API service runs `node apps/api/dist/main` (default Dockerfile CMD) and the Worker service overrides the start command to `node apps/api/dist/worker.js`. They share the same Redis and Postgres but are independent processes — a crash in one doesn't affect the other.
+### 9.3 The Slow First Request — Why and What To Say
 
-**Q: How do the frontend and API handle cross-origin cookies in production?**
+**Q: Your app is slow to load sometimes. Why?**
 
-> Vercel and Render are on different domains, so cookies must be `SameSite=None; Secure`. The auth controller checks `NODE_ENV === 'production'` and sets those flags automatically. In development, `SameSite=Lax` is used — no HTTPS needed.
+> Render's free Web Service tier has a **cold start**: if no request hits the service for 15 minutes, Render scales it down to zero. The next request has to spin up a fresh Docker container — download the image, start Node.js, connect to Postgres and Redis, and register all NestJS modules. This takes ~25–35 seconds.
 
-**Q: What environment variables does the production deployment need?**
+> This is a deliberate trade-off: free hosting in exchange for latency on infrequent use. It's completely acceptable for a portfolio/demo app. A paying user would use Render's Starter plan ($7/month) which keeps the container always-on.
 
-> `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `GEMINI_API_KEY`, `FRONTEND_URL`, `NODE_ENV=production`, `PORT=3001`. `RESEND_API_KEY` is optional — the app starts and runs without it; email alerts are silently skipped.
+> **How to demo around it:** Open the app URL and `/health` endpoint a few seconds before showing it to someone. The first request pays the cold start cost; subsequent requests are fast.
+
+**Q: Does the database also have a cold start?**
+
+> Neon also has a serverless cold start (their "scale-to-zero" feature), but it's much faster — typically under 1 second. The main visible latency is always Render's container startup.
+
+---
+
+### 9.4 Why Redis — Not Just "Because BullMQ Needs It"
+
+**Q: Why do you need Redis at all? Why not just use `setTimeout` or a database table for jobs?**
+
+> Three reasons Redis specifically:
+
+> **1. Job persistence across restarts.** `setTimeout` is in-process memory. If the Node.js server restarts mid-job (Render redeploys, crash, OOM), the job is lost forever. Redis persists job state externally — BullMQ can resume where it left off after a restart.
+
+> **2. Rate-limit counters.** SpendWise limits AI calls per user (20 chat messages/day, 4 recommendations/day). These counters need to be fast (sub-millisecond reads on every request) and have automatic TTL expiry. Redis `INCR` + `EXPIRE` is the canonical pattern. Using Postgres for this would add DB load on every single API call.
+
+> **3. Recommendation caching.** AI recommendations are cached in Redis for 6 hours (`ai:recs:{userId}`). A fresh Gemini call costs latency and burns the user's daily quota. Redis `GET`/`SET` with TTL is the right tool — not Postgres (no TTL support on rows), not in-memory (doesn't survive restarts).
+
+> **Why not a database table for the job queue?** Database polling (checking a `jobs` table every N seconds) is inefficient and adds latency. BullMQ uses Redis pub/sub for instant job delivery — a worker picks up a job the moment it's enqueued, with no polling lag.
+
+---
+
+### 9.5 Environment Variables — What Each One Does
+
+**Q: Walk me through every env var you set on Render and why it's needed.**
+
+| Variable | Value | Why it's needed |
+|----------|-------|-----------------|
+| `DATABASE_URL` | `postgresql://...@ep-long-shape.neon.tech/neondb?sslmode=require` | Prisma connection string. The `sslmode=require` is mandatory for Neon — connections without SSL are rejected. |
+| `REDIS_URL` | `rediss://default:...@...upstash.io:6379` | `ioredis` connection. The `rediss://` prefix (double `s`) signals TLS — required by Upstash. Without this, BullMQ jobs queue up but the connection silently fails. |
+| `JWT_SECRET` | 64-char hex string | Signs the 15-minute access token. Must be at least 32 chars; longer = harder to brute-force. Never reuse across environments. |
+| `JWT_EXPIRES_IN` | `15m` | Access token lifetime. Short on purpose — limits the window of a stolen token. |
+| `JWT_REFRESH_SECRET` | Different 64-char hex string | Signs the 7-day refresh token. **Must be different** from `JWT_SECRET` — if they were the same, a refresh token could be used as an access token. |
+| `JWT_REFRESH_EXPIRES_IN` | `7d` | How long the user stays logged in without re-entering their password. |
+| `GEMINI_API_KEY` | `AIzaSy...` | Google AI Studio key. Starts with `AIzaSy`. Used for both Gemini 2.5 Flash (chat/recs) and Gemini embedding-2 (vector embeddings). Get it free at [aistudio.google.com/apikey](https://aistudio.google.com/apikey). |
+| `NODE_ENV` | `production` | NestJS and Express change behaviour in production: detailed error messages are hidden from responses, cookie flags change to `SameSite=None; Secure` for cross-origin support. |
+| `PORT` | `3001` | The port NestJS listens on inside the container. Render routes external HTTPS traffic to this port. |
+| `FRONTEND_URL` | `https://spendwise-web-nine.vercel.app` | Used in CORS config (`app.enableCors({ origin: FRONTEND_URL })`). Without this, the browser blocks all API responses — cross-origin requests from Vercel to Render are rejected. |
+| `RESEND_API_KEY` | `re_...` | Optional. Used only for sending email alerts and weekly digests. If absent, the app starts normally and email features are silently skipped. |
+
+**Q: How do you get the `GEMINI_API_KEY`?**
+
+> 1. Go to [aistudio.google.com](https://aistudio.google.com)
+> 2. Sign in with a Google account
+> 3. Click **"Get API key"** → **"Create API key"**
+> 4. Copy the key — it starts with `AIzaSy`
+> 5. Free tier includes Gemini 2.5 Flash and gemini-embedding-2 with no credit card required
+
+**Q: Why are two different JWT secrets needed?**
+
+> If `JWT_SECRET` and `JWT_REFRESH_SECRET` were the same value, an attacker who obtained a valid refresh token (7-day lifetime) could use it as an access token by stripping the `Bearer` prefix — both tokens would verify against the same secret. Using separate secrets means a refresh token is cryptographically invalid as an access token, even if it passes signature verification.
+
+---
+
+### 9.6 How the RAG Pipeline Works End-to-End
+
+**Q: Walk me through exactly what happens when a user sends an AI chat message.**
+
+```text
+User types: "What was my biggest expense last month?"
+
+1. POST /api/ai/chat { question: "What was my biggest expense last month?" }
+
+2. Rate limit check (Redis INCR ai:chat:rate:{userId})
+   → If > 20 in 24h: return 429 Too Many Requests
+
+3. RagService.search(userId, question, topK=8):
+   a. Embed the question: Gemini gemini-embedding-2 API call
+      → 768-dim vector of the question text
+   b. pgvector cosine query:
+      SELECT merchant, category, amount, date, type
+      FROM transactions
+      WHERE user_id = {userId} AND embedding IS NOT NULL
+      ORDER BY embedding <=> {query_vector}::vector
+      LIMIT 8
+      → Returns 8 most semantically similar past transactions
+
+4. AiService fetches ALL transactions for userId (sorted by amount DESC)
+   → Pre-computes: total debits, total credits, category breakdown, largest single debit
+
+5. Builds prompt:
+   COMPLETE TRANSACTION LIST (all N transactions, sorted by amount):
+   Summary: ₹X total debits, ₹Y total credits
+   By category: Food ₹X, Shopping ₹Y, ...
+   Largest single debit: Merchant ₹Z on YYYY-MM-DD
+   [full transaction list line by line]
+
+   Additional semantic matches (RAG):
+   [8 most similar transactions from pgvector search]
+
+   Question: What was my biggest expense last month?
+
+6. Gemini 2.5 Flash generates answer from the combined context
+   → Returns plain text
+
+7. POST /api/ai/chat returns { answer: "...", sourcesUsed: 8 }
+```
+
+**Q: Why both RAG chunks AND the full transaction list? Isn't one enough?**
+
+> They serve different purposes. RAG (cosine similarity search) is good at finding *semantically relevant* transactions — if you ask "tell me about my coffee spending" it surfaces Starbucks, Café Coffee Day, etc. But cosine similarity is bad at aggregate/numerical queries — "what was my biggest expense?" doesn't reliably return the highest-amount transaction because semantic similarity has nothing to do with amount. The full transaction list sorted by amount ensures factual accuracy for aggregate questions. The RAG chunks provide supplemental semantic context. Without both, the AI gives confidently wrong answers.
+
+---
+
+### 9.7 How the API Calls Flow (Frontend → API)
+
+**Q: How does a page like the dashboard actually load its data?**
+
+```text
+1. Next.js renders the dashboard page (client component)
+
+2. TanStack Query fires parallel requests:
+   - GET /api/transactions/overview    → stat cards (total spent, income, etc.)
+   - GET /api/transactions?limit=8     → recent transactions table
+   - GET /api/transactions/daily-spend?days=60 → area chart data
+   - GET /api/ai/recommendations       → AI savings card
+
+3. Each request:
+   a. Axios attaches the access_token cookie automatically (httpOnly, set by the API)
+   b. NestJS JwtAuthGuard verifies the JWT signature and expiry
+   c. If 401 → Axios interceptor fires POST /api/auth/refresh
+                browser sends refresh_token cookie automatically
+                API issues new tokens as new cookies
+                original request retried
+   d. Response returned, TanStack Query caches it
+
+4. CORS: Render API has `Access-Control-Allow-Origin: https://spendwise-web-nine.vercel.app`
+   → Browser allows the cross-origin response (Vercel → Render)
+   → Without FRONTEND_URL set correctly on Render, ALL requests are blocked here
+```
+
+**Q: Why does it sometimes take longer for the AI recommendations card to load vs the rest of the dashboard?**
+
+> Two reasons. First, if the result isn't cached in Redis, it makes a live Gemini API call which takes 2–4 seconds. Second, the recommendations endpoint fetches all the user's transactions from Postgres, builds a stats object, and sends it all to Gemini — more I/O than the other dashboard endpoints. The result is Redis-cached for 6 hours so subsequent loads are instant (cache hit returns in <10ms).
+
+---
+
+### 9.2b Why Each Platform (continued Q&A)
+
+**Q: Why not just deploy everything on one platform?**
+
+> Each platform is purpose-built for its role:
+> - Vercel is optimised for Next.js with edge caching, automatic preview deployments on PRs, and zero-config builds
+> - Render is the only free-tier Docker host — the API needs Docker because it runs Prisma migrations on startup, which requires the full Node + Prisma CLI environment
+> - Neon's free tier is the only managed Postgres with pgvector that doesn't pause
+> - Upstash is the only serverless Redis with a free tier
+> Combining them gives a production-grade stack at $0.
+
+**Q: How does auto-deploy work when you push code?**
+
+> GitHub is connected to both Vercel and Render. Every push to `main`:
+> 1. GitHub Actions CI runs (type-check + build verification on both API and web)
+> 2. Vercel detects the push, rebuilds `apps/web`, deploys to CDN edge nodes worldwide
+> 3. Render detects the push, rebuilds the Docker image from `apps/api/Dockerfile`, runs `prisma migrate deploy`, starts the new container
+
+---
+
+## Part 9: Red Flags to Avoid
+
+1. **Don't say "I used Gemini because it's free"** — say "cost was a factor, but Gemini 2.5 Flash handles structured output reliably and the model quality is competitive. The migration from Claude was a business decision, not a technical compromise."
+2. **Don't hand-wave the RAG pipeline** — be ready to explain exactly what `<=>` does, what 768-dim means, why `outputDimensionality: 768` is different from a 768-dim native model, and why top-8 was chosen for retrieval
+3. **Don't say tokens are "secure"** — say "httpOnly cookies protect against XSS token theft; SameSite=Lax/None mitigates CSRF. No system is completely secure."
+4. **Don't claim subscriptions are perfectly detected** — say "confidence ≥ 0.7 gives reasonable precision; false positives are possible on irregular but frequent merchants, which is why users can manually dismiss detections"
+5. **Don't forget the async angle** — interviewers love asking why you chose a job queue; be ready with the "synchronous = 8 second user wait + timeout risk" answer
+6. **Don't fumble the cold start question** — it's not a bug, it's a known free-tier trade-off. Have the Render spin-down/spin-up explanation ready.
+7. **Don't say you "just set env vars"** — be ready to explain WHY each variable exists (see section 9.5)
+8. **Don't say the privacy trade-off doesn't exist** — acknowledge that Gemini receives transaction text, explain the mitigations, and mention the local-model alternative
+
