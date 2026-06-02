@@ -1,10 +1,10 @@
-﻿# SpendWise
+?# SpendWise
 
 **An AI-powered personal finance manager for Indian users.**
 
-Upload your bank statement once. SpendWise automatically categorises every transaction, detects recurring subscription charges, computes weekly spending summaries, lets you set monthly budgets, and gives you an AI assistant that answers questions grounded in your *own* transaction history â€” not generic advice.
+Upload your bank statement once. SpendWise automatically categorises every transaction, detects recurring subscription charges, computes weekly spending summaries, lets you set monthly budgets, and gives you an AI assistant that answers questions grounded in your *own* transaction history — not generic advice.
 
-> Built with NestJS Â· Next.js 15 Â· PostgreSQL + pgvector Â· Redis Â· Claude Sonnet 4.6 Â· Voyage AI
+> Built with NestJS · Next.js 15 · PostgreSQL + pgvector · Redis · Claude Sonnet 4.6 · Voyage AI
 
 ---
 
@@ -12,16 +12,16 @@ Upload your bank statement once. SpendWise automatically categorises every trans
 
 | Feature | Details |
 |---------|---------|
-| **Multi-bank CSV import** | HDFC, ICICI, SBI, Axis Bank â€” automatic column alias normalisation, magic-byte validation, deduplication |
-| **Smart categorisation** | 9 categories (Food, Travel, Utilities, Entertainment, Health, Shopping, Subscriptions, Income, Other) â€” keyword-based auto-classify, inline editing |
+| **Multi-bank CSV import** | HDFC, ICICI, SBI, Axis Bank — automatic column alias normalisation, magic-byte validation, deduplication |
+| **Smart categorisation** | 9 categories (Food, Travel, Utilities, Entertainment, Health, Shopping, Subscriptions, Income, Other) — keyword-based auto-classify, inline editing |
 | **Subscription leak detection** | Confidence-scored recurring charge detection across 6 billing cycles (7/14/30/90/180/365 days); flags unused subscriptions with annual cost |
 | **Monthly budgets** | Set per-category spending limits; live progress bars, prorated month-end forecast, health score |
 | **6-month category trends** | Stacked bar chart showing month-by-month spend across all categories |
 | **Weekly spending summaries** | ISO-week groupings with total spend, income, category breakdown, top merchants |
-| **RAG AI chat** | Ask questions about your own finances; Voyage AI embeddings + pgvector cosine search feeds relevant chunks into Claude Sonnet 4.6 |
-| **AI recommendations** | Structured savings recommendations: top leaks, estimated monthly savings, action checklist â€” Redis-cached 6h, per-user rate limited |
-| **Weekly email digest** | Every Monday: last week's spend, income, net savings, top categories and merchants â€” opt-in via Settings |
-| **Email alerts** | New subscription leak detected â†’ immediate notification |
+| **RAG AI chat** | Ask questions about your own finances; Voyage AI embeddings + pgvector cosine search provides supplemental context; full transaction history injected into every prompt for factually accurate answers |
+| **AI recommendations** | Structured savings recommendations: top leaks, estimated monthly savings, action checklist — Redis-cached 6h, per-user rate limited |
+| **Weekly email digest** | Every Monday: last week's spend, income, net savings, top categories and merchants — opt-in via Settings |
+| **Email alerts** | New subscription leak detected → immediate notification |
 | **Secure auth** | httpOnly SameSite=Lax cookies, bcrypt refresh tokens, silent 401 rotation, per-user AI rate limits |
 
 ---
@@ -32,11 +32,11 @@ Upload your bank statement once. SpendWise automatically categorises every trans
 |-------|-----------|
 | Frontend | Next.js 15.5 (App Router), React 19, TypeScript 5, Tailwind CSS 4, shadcn/ui |
 | Backend | NestJS 10, TypeScript 5, Passport JWT, class-validator |
-| Database | PostgreSQL 16 + pgvector (1024-dim, HNSW index) |
+| Database | PostgreSQL 16 + pgvector (512-dim, HNSW index) |
 | ORM | Prisma 5 |
 | Cache / Queue | Redis 7 + BullMQ 5 |
-| AI â€” chat & recs | Claude Sonnet 4.6 (Anthropic SDK) |
-| AI â€” embeddings | Voyage AI `voyage-3-lite` (1024 dims) |
+| AI — chat & recs | Claude Sonnet 4.6 (Anthropic SDK) |
+| AI — embeddings | Voyage AI `voyage-3-lite` (512 dims) |
 | Email | Resend |
 | State | TanStack Query 5, Zustand 5 |
 | Charts | Recharts 3 |
@@ -50,46 +50,46 @@ Upload your bank statement once. SpendWise automatically categorises every trans
 
 ```text
 SpendWise/
-â”œâ”€â”€ apps/
-â”‚   â”œâ”€â”€ api/                    NestJS REST API (port 3001)
-â”‚   â”‚   â”œâ”€â”€ src/
-â”‚   â”‚   â”‚   â”œâ”€â”€ modules/
-â”‚   â”‚   â”‚   â”‚   â”œâ”€â”€ auth/           JWT auth, httpOnly cookies, refresh rotation
-â”‚   â”‚   â”‚   â”‚   â”œâ”€â”€ users/          Profile + notification preferences (GET/PATCH)
-â”‚   â”‚   â”‚   â”‚   â”œâ”€â”€ transactions/   CRUD, filters, category edit, overview stats
-â”‚   â”‚   â”‚   â”‚   â”œâ”€â”€ uploads/        CSV/XLSX parsing, magic-byte validation
-â”‚   â”‚   â”‚   â”‚   â”œâ”€â”€ subscriptions/  Recurring charge detection + dismiss/confirm
-â”‚   â”‚   â”‚   â”‚   â”œâ”€â”€ budgets/        Monthly budget CRUD, forecast, health score
-â”‚   â”‚   â”‚   â”‚   â”œâ”€â”€ insights/       ISO-week summaries, category trends
-â”‚   â”‚   â”‚   â”‚   â”œâ”€â”€ ai/             Claude Sonnet recs + RAG chat, rate limits
-â”‚   â”‚   â”‚   â”‚   â”œâ”€â”€ rag/            Voyage AI embeddings, pgvector search
-â”‚   â”‚   â”‚   â”‚   â””â”€â”€ alerts/         Resend email alerts
-â”‚   â”‚   â”‚   â”œâ”€â”€ jobs/
-â”‚   â”‚   â”‚   â”‚   â”œâ”€â”€ import.processor.ts   BullMQ: embed â†’ detect â†’ insights
-â”‚   â”‚   â”‚   â”‚   â””â”€â”€ digest/               Weekly email cron (Mon 08:00 IST)
-â”‚   â”‚   â”‚   â”œâ”€â”€ common/             Prisma service, Redis cache, JWT guard
-â”‚   â”‚   â”‚   â”œâ”€â”€ main.ts             HTTP server entry (Helmet CSP, CORS, Swagger)
-â”‚   â”‚   â”‚   â””â”€â”€ worker.ts           Separate BullMQ worker entry point
-â”‚   â”‚   â””â”€â”€ prisma/
-â”‚   â”‚       â”œâ”€â”€ schema.prisma       All models (User, Transaction, Budget, â€¦)
-â”‚   â”‚       â””â”€â”€ migrations/         All applied migrations
-â”‚   â”‚
-â”‚   â””â”€â”€ web/                    Next.js 15 frontend (port 3000)
-â”‚       â”œâ”€â”€ app/
-â”‚       â”‚   â”œâ”€â”€ (auth)/             /login, /signup
-â”‚       â”‚   â””â”€â”€ (dashboard)/
-â”‚       â”‚       â”œâ”€â”€ dashboard/      Stat cards, area chart, recent transactions
-â”‚       â”‚       â”œâ”€â”€ transactions/   Table, search, filters, CSV export, inline edit
-â”‚       â”‚       â”œâ”€â”€ subscriptions/  Leak cards, dismiss/confirm
-â”‚       â”‚       â”œâ”€â”€ budgets/        Budget CRUD, progress bars, forecast
-â”‚       â”‚       â”œâ”€â”€ insights/       AI chat, weekly cards, 6-month trends chart
-â”‚       â”‚       â””â”€â”€ settings/       Notification preferences
-â”‚       â”œâ”€â”€ components/             shadcn/ui + custom layout components
-â”‚       â”œâ”€â”€ store/                  Zustand: auth, UI state
-â”‚       â””â”€â”€ lib/api.ts              Axios + TanStack Query, 401 race-condition fix
-â”‚
-â””â”€â”€ packages/
-    â””â”€â”€ shared-types/               TransactionCategory, AuthTokens, AiRecommendationâ€¦
+├── apps/
+│   ├── api/                    NestJS REST API (port 3001)
+│   │   ├── src/
+│   │   │   ├── modules/
+│   │   │   │   ├── auth/           JWT auth, httpOnly cookies, refresh rotation
+│   │   │   │   ├── users/          Profile + notification preferences (GET/PATCH)
+│   │   │   │   ├── transactions/   CRUD, filters, category edit, overview stats
+│   │   │   │   ├── uploads/        CSV/XLSX parsing, magic-byte validation
+│   │   │   │   ├── subscriptions/  Recurring charge detection + dismiss/confirm
+│   │   │   │   ├── budgets/        Monthly budget CRUD, forecast, health score
+│   │   │   │   ├── insights/       ISO-week summaries, category trends
+│   │   │   │   ├── ai/             Claude Sonnet recs + RAG chat, rate limits
+│   │   │   │   ├── rag/            Voyage AI embeddings, pgvector search
+│   │   │   │   └── alerts/         Resend email alerts
+│   │   │   ├── jobs/
+│   │   │   │   ├── import.processor.ts   BullMQ: embed → detect → insights
+│   │   │   │   └── digest/               Weekly email cron (Mon 08:00 IST)
+│   │   │   ├── common/             Prisma service, Redis cache, JWT guard
+│   │   │   ├── main.ts             HTTP server entry (Helmet CSP, CORS, Swagger)
+│   │   │   └── worker.ts           Separate BullMQ worker entry point
+│   │   └── prisma/
+│   │       ├── schema.prisma       All models (User, Transaction, Budget, …)
+│   │       └── migrations/         All applied migrations
+│   │
+│   └── web/                    Next.js 15 frontend (port 3000)
+│       ├── app/
+│       │   ├── (auth)/             /login, /signup
+│       │   └── (dashboard)/
+│       │       ├── dashboard/      Stat cards, area chart, recent transactions
+│       │       ├── transactions/   Table, search, filters, CSV export, inline edit
+│       │       ├── subscriptions/  Leak cards, dismiss/confirm
+│       │       ├── budgets/        Budget CRUD, progress bars, forecast
+│       │       ├── insights/       AI chat, weekly cards, 6-month trends chart
+│       │       └── settings/       Notification preferences
+│       ├── components/             shadcn/ui + custom layout components
+│       ├── store/                  Zustand: auth, UI state
+│       └── lib/api.ts              Axios + TanStack Query, 401 race-condition fix
+│
+└── packages/
+    └── shared-types/               TransactionCategory, AuthTokens, AiRecommendation…
 ```
 
 ---
@@ -136,9 +136,9 @@ PORT=3001
 ```
 
 API keys:
-- **Anthropic** â€” [console.anthropic.com](https://console.anthropic.com)
-- **Voyage AI** â€” [dash.voyageai.com](https://dash.voyageai.com)
-- **Resend** â€” [resend.com](https://resend.com)
+- **Anthropic** — [console.anthropic.com](https://console.anthropic.com)
+- **Voyage AI** — [dash.voyageai.com](https://dash.voyageai.com)
+- **Resend** — [resend.com](https://resend.com)
 
 ### 3. Set up the database
 
@@ -178,7 +178,7 @@ docker compose up --build
 |-----------|------|
 | `postgres` | PostgreSQL 16 + pgvector |
 | `redis` | Redis 7 |
-| `api` | NestJS HTTP server â€” runs `prisma migrate deploy` on startup |
+| `api` | NestJS HTTP server — runs `prisma migrate deploy` on startup |
 | `worker` | BullMQ import-queue processor (separate process, no HTTP) |
 | `web` | Next.js standalone build |
 
@@ -196,10 +196,10 @@ SpendWise supports **HDFC, ICICI, SBI, and Axis Bank** CSV/XLSX formats.
 
 | Bank | Export path |
 |------|------------|
-| HDFC | Net Banking â†’ Accounts â†’ Download Statement â†’ CSV |
-| ICICI | Net Banking â†’ Statements â†’ Download â†’ Excel/CSV |
-| SBI | YONO / Net Banking â†’ e-Statements â†’ Date range â†’ Download CSV |
-| Axis | Net Banking â†’ Accounts â†’ Account Statement â†’ CSV Download |
+| HDFC | Net Banking → Accounts → Download Statement → CSV |
+| ICICI | Net Banking → Statements → Download → Excel/CSV |
+| SBI | YONO / Net Banking → e-Statements → Date range → Download CSV |
+| Axis | Net Banking → Accounts → Account Statement → CSV Download |
 
 The file must include at minimum: a **date column**, a **description/narration column**, and **debit/credit amount columns**. Column names are normalised automatically.
 
@@ -207,9 +207,9 @@ The file must include at minimum: a **date column**, a **description/narration c
 
 Click **Upload Statement** from the sidebar or dashboard. After upload, three background jobs run:
 
-1. **Embed** â€” each transaction is embedded with Voyage AI and stored in pgvector
-2. **Detect subscriptions** â€” recurring charges are scored and flagged
-3. **Compute insights** â€” weekly summaries are calculated
+1. **Embed** — each transaction is embedded with Voyage AI and stored in pgvector
+2. **Detect subscriptions** — recurring charges are scored and flagged
+3. **Compute insights** — weekly summaries are calculated
 
 Processing typically completes in under 30 seconds.
 
@@ -239,7 +239,7 @@ Click **Dismiss** on false positives (e.g. rent). Click **Confirm** to lock in a
 ### 7. Budgets
 
 Set per-category monthly spending limits. Each budget card shows:
-- Live progress bar (green â†’ amber â†’ red as you approach the limit)
+- Live progress bar (green → amber → red as you approach the limit)
 - Prorated month-end forecast
 - Remaining balance
 - Overall budget health score
@@ -247,8 +247,8 @@ Set per-category monthly spending limits. Each budget card shows:
 ### 8. Insights
 
 Two panels:
-- **6-month category trends** â€” stacked bar chart across the last 6 months
-- **Weekly insight cards** â€” spend/income/savings per ISO week with category breakdown and top merchants
+- **6-month category trends** — stacked bar chart across the last 6 months
+- **Weekly insight cards** — spend/income/savings per ISO week with category breakdown and top merchants
 
 ### 9. AI Chat
 
@@ -260,26 +260,26 @@ Ask any question about your spending history. The assistant retrieves your most 
 - "Which week did I spend the most overall?"
 - "Am I spending more on subscriptions than last quarter?"
 
-Rate limits: 20 chat messages/day Â· 4 AI recommendation calls/day (per user).
+Rate limits: 20 chat messages/day · 4 AI recommendation calls/day (per user).
 
 ### 10. Settings
 
 Toggle email notifications:
-- **Weekly digest** â€” Monday summary email
-- **New subscription alert** â€” email when a new leak is detected
-- **Spending spike alert** â€” email when weekly spend is unusually high
+- **Weekly digest** — Monday summary email
+- **New subscription alert** — email when a new leak is detected
+- **Spending spike alert** — email when weekly spend is unusually high
 
 ---
 
 ## Security
 
 - Passwords hashed with **bcrypt** (12 rounds)
-- Tokens stored in **httpOnly SameSite=Lax cookies** â€” inaccessible to JavaScript
-- Refresh tokens **hashed in the database** â€” a leaked DB row cannot be replayed
-- **Atomic refresh token rotation** â€” old token deleted and new token inserted in a single Prisma transaction
+- Tokens stored in **httpOnly SameSite=Lax cookies** — inaccessible to JavaScript
+- Refresh tokens **hashed in the database** — a leaked DB row cannot be replayed
+- **Atomic refresh token rotation** — old token deleted and new token inserted in a single Prisma transaction
 - **Helmet** with a strict Content Security Policy (`script-src 'self'`, no inline scripts)
-- **File upload magic-byte validation** â€” XLSX/XLS files are rejected if content doesn't match expected binary signatures
-- **Per-user AI rate limits** â€” Redis counters with 24h TTL
+- **File upload magic-byte validation** — XLSX/XLS files are rejected if content doesn't match expected binary signatures
+- **Per-user AI rate limits** — Redis counters with 24h TTL
 
 ---
 
@@ -287,20 +287,20 @@ Toggle email notifications:
 
 ```
 CSV upload
-    â”‚
-    â”œâ”€â–º JOB_EMBED_TRANSACTIONS
-    â”‚       Generate Voyage AI embeddings â†’ upsert into pgvector
-    â”‚
-    â”œâ”€â–º JOB_DETECT_SUBSCRIPTIONS
-    â”‚       Group by merchant â†’ compute interval stddev â†’ score confidence
-    â”‚       â†’ upsert Subscription records â†’ send email alert if new leaks found
-    â”‚
-    â””â”€â–º JOB_COMPUTE_INSIGHTS
-            Group by ISO week â†’ compute totals, category breakdown, top merchants
-            â†’ upsert weekly Insight records
+    │
+    ├─► JOB_EMBED_TRANSACTIONS
+    │       Generate Voyage AI embeddings → upsert into pgvector
+    │
+    ├─► JOB_DETECT_SUBSCRIPTIONS
+    │       Group by merchant → compute interval stddev → score confidence
+    │       → upsert Subscription records → send email alert if new leaks found
+    │
+    └─► JOB_COMPUTE_INSIGHTS
+            Group by ISO week → compute totals, category breakdown, top merchants
+            → upsert weekly Insight records
 
 Weekly cron (Mon 08:00 IST):
-    â””â”€â–º Send weekly digest email to opted-in users
+    └─► Send weekly digest email to opted-in users
 ```
 
 All jobs use 3-attempt exponential-backoff retry. The BullMQ worker runs as a **separate process** (`worker.ts`) so heavy uploads cannot starve the HTTP server.
@@ -344,7 +344,7 @@ Key endpoints:
 npm test --workspace=apps/api
 ```
 
-7 test suites Â· 90 tests Â· 100% pass rate
+7 test suites · 90 tests · 100% pass rate
 
 | Suite | Coverage |
 |-------|---------|
