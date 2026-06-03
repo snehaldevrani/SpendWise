@@ -97,7 +97,12 @@ Return ONLY the JSON object, no explanation.`;
     await this.cache.del(`ai:recs:${userId}`);
   }
 
-  async chat(userId: string, question: string, contextChunks: string[]): Promise<string> {
+  async chat(
+    userId: string,
+    question: string,
+    contextChunks: string[],
+    history: { role: 'user' | 'model'; parts: string }[] = [],
+  ): Promise<string> {
     // Per-user rate limit
     const rateLimitKey = `ai:chat:rate:${userId}`;
     const count = await this.cache.incr(rateLimitKey, RATE_WINDOW);
@@ -105,47 +110,56 @@ Return ONLY the JSON object, no explanation.`;
       throw new HttpException('AI chat limit reached for today. Try again tomorrow.', HttpStatus.TOO_MANY_REQUESTS);
     }
 
-    // Always fetch ALL transactions for factual accuracy.
-    // Semantic RAG alone cannot answer aggregate/numeric queries (largest, total, count)
-    // because it returns semantically similar chunks, not sorted-by-amount ones.
-    const allTxns = await this.prisma.transaction.findMany({
-      where: { userId },
-      select: { merchant: true, amount: true, category: true, date: true, type: true },
-      orderBy: [{ amount: 'desc' }, { date: 'desc' }],
-    });
+    const isFirstMessage = history.length === 0;
 
-    let structuredContext = '';
-    if (allTxns.length > 0) {
-      const debits = allTxns.filter((t) => t.type === 'debit');
-      const credits = allTxns.filter((t) => t.type === 'credit');
-      const totalDebit = debits.reduce((s, t) => s + Number(t.amount), 0);
-      const totalCredit = credits.reduce((s, t) => s + Number(t.amount), 0);
+    // Only fetch transaction data on the first message in a conversation.
+    // For follow-up messages the data is already present inside the Gemini
+    // chat history that we pass back, so we avoid a redundant DB query and
+    // avoid re-sending thousands of tokens with every single message.
+    let firstTurnPrefix = '';
+    if (isFirstMessage) {
+      const ragContext = contextChunks.length > 0
+        ? `\nAdditional semantic matches:\n${contextChunks.join('\n')}`
+        : '';
 
-      const categoryTotals: Record<string, number> = {};
-      for (const t of debits) {
-        categoryTotals[t.category] = (categoryTotals[t.category] ?? 0) + Number(t.amount);
-      }
-      const categorySummary = Object.entries(categoryTotals)
-        .sort(([, a], [, b]) => b - a)
-        .map(([c, a]) => `${c} ₹${a.toFixed(2)}`)
-        .join(', ');
+      const allTxns = await this.prisma.transaction.findMany({
+        where: { userId },
+        select: { merchant: true, amount: true, category: true, date: true, type: true },
+        orderBy: [{ amount: 'desc' }, { date: 'desc' }],
+      });
 
-      const txnLines = allTxns
-        .map((t) => `  ${new Date(t.date).toISOString().slice(0, 10)}: ${sanitizeMerchant(t.merchant)} (${t.category}) ₹${Number(t.amount).toFixed(2)} [${t.type}]`)
-        .join('\n');
+      if (allTxns.length > 0) {
+        const debits = allTxns.filter((t) => t.type === 'debit');
+        const credits = allTxns.filter((t) => t.type === 'credit');
+        const totalDebit = debits.reduce((s, t) => s + Number(t.amount), 0);
+        const totalCredit = credits.reduce((s, t) => s + Number(t.amount), 0);
 
-      structuredContext = `COMPLETE TRANSACTION LIST (all ${allTxns.length} transactions, sorted by amount desc):
+        const categoryTotals: Record<string, number> = {};
+        for (const t of debits) {
+          categoryTotals[t.category] = (categoryTotals[t.category] ?? 0) + Number(t.amount);
+        }
+        const categorySummary = Object.entries(categoryTotals)
+          .sort(([, a], [, b]) => b - a)
+          .map(([c, a]) => `${c} ₹${a.toFixed(2)}`)
+          .join(', ');
+
+        const txnLines = allTxns
+          .map((t) => `  ${new Date(t.date).toISOString().slice(0, 10)}: ${sanitizeMerchant(t.merchant)} (${t.category}) ₹${Number(t.amount).toFixed(2)} [${t.type}]`)
+          .join('\n');
+
+        firstTurnPrefix = `COMPLETE TRANSACTION LIST (all ${allTxns.length} transactions, sorted by amount desc):
 Summary: ₹${totalDebit.toFixed(2)} total debits (${debits.length} txns), ₹${totalCredit.toFixed(2)} total credits (${credits.length} txns)
 By category (debits): ${categorySummary}
 Largest single debit: ${debits[0] ? `${sanitizeMerchant(debits[0].merchant)} ₹${Number(debits[0].amount).toFixed(2)} on ${new Date(debits[0].date).toISOString().slice(0, 10)}` : 'none'}
 
 Transactions:
-${txnLines}`;
-    }
+${txnLines}${ragContext}
 
-    const ragContext = contextChunks.length > 0
-      ? `\nAdditional semantic matches:\n${contextChunks.join('\n')}`
-      : '';
+`;
+      } else if (ragContext) {
+        firstTurnPrefix = `${ragContext}\n\n`;
+      }
+    }
 
     const model = this.genAI.getGenerativeModel({
       model: 'gemini-2.5-flash',
@@ -154,7 +168,14 @@ The COMPLETE TRANSACTION LIST contains every transaction — use it for all fact
 Be concise and accurate. Never guess or approximate when the exact data is present.`,
     });
 
-    const result = await model.generateContent(`${structuredContext}${ragContext}\n\nQuestion: ${question}`);
+    // Map stored history turns into the shape Gemini's SDK expects.
+    const geminiHistory = history.map((h) => ({
+      role: h.role,
+      parts: [{ text: h.parts }],
+    }));
+
+    const chatSession = model.startChat({ history: geminiHistory });
+    const result = await chatSession.sendMessage(`${firstTurnPrefix}Question: ${question}`);
     return result.response.text();
   }
 

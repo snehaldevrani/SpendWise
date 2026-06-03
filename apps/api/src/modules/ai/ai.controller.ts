@@ -22,7 +22,7 @@ export class AiController {
   @Post('chat')
   async chat(@CurrentUser() user: AuthUser, @Body() dto: ChatDto) {
     const chunks = await this.ragService.search(user.id, dto.question);
-    const answer = await this.aiService.chat(user.id, dto.question, chunks);
+    const answer = await this.aiService.chat(user.id, dto.question, chunks, dto.history ?? []);
     return { answer, sourcesUsed: chunks.length };
   }
 }

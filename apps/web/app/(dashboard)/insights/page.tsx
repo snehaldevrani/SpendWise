@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Send, Sparkles, Lightbulb, Upload, BarChart3 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,7 +14,7 @@ import {
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import type { Insight, CategoryTrendsRow } from "@/lib/api";
-import { useUIStore } from "@/store";
+import { useUIStore, useChatStore } from "@/store";
 
 const CATEGORY_COLORS: Record<string, string> = {
   food: "bg-orange-500", shopping: "bg-blue-500", utilities: "bg-yellow-500",
@@ -39,17 +39,9 @@ const SUGGESTED = [
   "Where can I save the most money?",
 ];
 
-interface Message { id: number; role: "user" | "assistant"; content: string }
-
-const GREETING: Message = {
-  id: 0,
-  role: "assistant",
-  content: "Hi! I'm your SpendWise AI. Ask me anything about your spending — I analyse your real transaction history to give you personalised answers.",
-};
-
 export default function InsightsPage() {
   const { setUploadDialog } = useUIStore();
-  const [messages, setMessages] = useState<Message[]>([GREETING]);
+  const { messages, addMessage } = useChatStore();
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -71,22 +63,29 @@ export default function InsightsPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
-  const sendMessage = async (question: string) => {
+  const sendMessage = useCallback(async (question: string) => {
     if (!question.trim() || isTyping) return;
-    const userMsg: Message = { id: Date.now(), role: "user", content: question };
-    setMessages((prev) => [...prev, userMsg]);
+    const userMsg = { id: Date.now(), role: "user" as const, content: question };
+    addMessage(userMsg);
     setInput("");
     setIsTyping(true);
     try {
-      const res = await api.post<{ answer: string; sourcesUsed: number }>("/ai/chat", { question });
-      setMessages((prev) => [...prev, { id: Date.now() + 1, role: "assistant", content: res.data.answer }]);
+      // Build history from all stored turns EXCEPT the greeting (id 0) and the
+      // message we just added. Map assistant→model for the Gemini SDK.
+      const currentMessages = useChatStore.getState().messages;
+      const history = currentMessages
+        .filter((m) => m.id !== 0 && m.id !== userMsg.id)
+        .map((m) => ({ role: m.role === "assistant" ? "model" : "user" as "user" | "model", parts: m.content }));
+
+      const res = await api.post<{ answer: string; sourcesUsed: number }>("/ai/chat", { question, history });
+      addMessage({ id: Date.now() + 1, role: "assistant", content: res.data.answer });
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Sorry, I couldn't answer that right now. Please try again.";
-      setMessages((prev) => [...prev, { id: Date.now() + 1, role: "assistant", content: msg }]);
+      addMessage({ id: Date.now() + 1, role: "assistant", content: msg });
     } finally {
       setIsTyping(false);
     }
-  };
+  }, [isTyping, addMessage]);
 
   return (
     <div className="max-w-7xl mx-auto">

@@ -3,6 +3,42 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { api } from '@/lib/api';
 
+// ─── Chat ────────────────────────────────────────────────────────────────────
+
+export interface ChatMessage {
+  id: number;
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+const GREETING: ChatMessage = {
+  id: 0,
+  role: 'assistant',
+  content: "Hi! I'm your SpendWise AI. Ask me anything about your spending — I analyse your real transaction history to give you personalised answers.",
+};
+
+interface ChatState {
+  messages: ChatMessage[];
+  addMessage: (msg: ChatMessage) => void;
+  clearHistory: () => void;
+}
+
+export const useChatStore = create<ChatState>()(
+  persist(
+    (set) => ({
+      messages: [GREETING],
+      addMessage: (msg) => set((s) => ({ messages: [...s.messages, msg] })),
+      clearHistory: () => set({ messages: [GREETING] }),
+    }),
+    {
+      name: 'chat-store',
+      partialize: (s) => ({ messages: s.messages }),
+    },
+  ),
+);
+
+// ─── Auth ─────────────────────────────────────────────────────────────────────
+
 interface AuthState {
   user: { id: string; email: string } | null;
   setUser: (user: { id: string; email: string }) => void;
@@ -17,6 +53,8 @@ export const useAuthStore = create<AuthState>()(
       setUser: (user) => set({ user }),
       logout: () => {
         set({ user: null });
+        // Clear persisted chat history so one user's data doesn't linger for the next
+        useChatStore.getState().clearHistory();
       },
       isAuthenticated: () => !!get().user,
     }),
