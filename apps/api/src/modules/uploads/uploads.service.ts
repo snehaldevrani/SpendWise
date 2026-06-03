@@ -30,7 +30,10 @@ export class UploadsService {
     // Validate magic bytes to prevent disguised file attacks
     this.validateMagicBytes(file.buffer, ext);
 
-    const { rows, errors } = this.csvParser.parse(file.buffer, file.originalname, password);
+    const isPdf = ext.endsWith('.pdf');
+    const { rows, errors } = isPdf
+      ? await this.csvParser.parsePdf(file.buffer)
+      : this.csvParser.parse(file.buffer, file.originalname, password);
 
     // Wipe previous data so each upload starts fresh
     await this.prisma.subscription.deleteMany({ where: { userId } });
