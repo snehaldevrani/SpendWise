@@ -164,8 +164,9 @@ model Budget {
   userId      String              @map("user_id")
   category    TransactionCategory
   limitAmount Decimal             @map("limit_amount") @db.Decimal(12, 2)
-  month       Int                 // 1–12
-  year        Int
+  month       Int                 // 1–12 for one-off; 0 for recurring sentinel
+  year        Int                 // calendar year for one-off; 0 for recurring sentinel
+  recurring   Boolean             @default(false)
   createdAt   DateTime            @default(now()) @map("created_at")
   updatedAt   DateTime            @updatedAt @map("updated_at")
 

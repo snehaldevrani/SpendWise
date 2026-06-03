@@ -24,12 +24,18 @@ export class BudgetsController {
 
   @Post()
   upsert(@CurrentUser() user: AuthUser, @Body() dto: UpsertBudgetDto) {
+    const recurring = dto.recurring ?? false;
+    const now = new Date();
+    const month = recurring ? 0 : (dto.month ?? now.getMonth() + 1);
+    const year  = recurring ? 0 : (dto.year  ?? now.getFullYear());
+
     return this.budgetsService.upsertBudget(
       user.id,
       dto.category,
       dto.limitAmount,
-      dto.month,
-      dto.year,
+      month,
+      year,
+      recurring,
     );
   }
 

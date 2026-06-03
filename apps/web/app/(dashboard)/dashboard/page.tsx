@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import {
@@ -29,8 +30,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { api } from "@/lib/api";
-import type { OverviewData, DailySpend, Transaction, Subscription, AiRecommendation } from "@/lib/api";
+import type { OverviewData, DailySpend, Transaction, Subscription, AiRecommendation, RangeOverview } from "@/lib/api";
 import { useAuthStore, useUIStore } from "@/store";
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -70,9 +72,27 @@ function EmptyState() {
   );
 }
 
+type RangePreset = 'month' | '2mo' | '3mo' | '6mo';
+
+const RANGE_LABELS: Record<RangePreset, string> = {
+  month: 'This month',
+  '2mo': 'Last 2 months',
+  '3mo': 'Last 3 months',
+  '6mo': 'Last 6 months',
+};
+
+function getPresetDates(preset: RangePreset): { start: string; end: string } {
+  const now = new Date();
+  const end = now.toISOString().slice(0, 10);
+  const monthsBack = preset === '2mo' ? 1 : preset === '3mo' ? 2 : 5;
+  const start = new Date(now.getFullYear(), now.getMonth() - monthsBack, 1);
+  return { start: start.toISOString().slice(0, 10), end };
+}
+
 export default function DashboardPage() {
   const { user } = useAuthStore();
   const router = useRouter();
+  const [rangePreset, setRangePreset] = useState<RangePreset>('month');
 
   const overview = useQuery<OverviewData | null>({
     queryKey: ["overview"],
@@ -104,6 +124,13 @@ export default function DashboardPage() {
     enabled: !!overview.data,
     staleTime: 6 * 60 * 60 * 1000,
     retry: false,
+  });
+
+  const presetDates = rangePreset !== 'month' ? getPresetDates(rangePreset) : null;
+  const rangeQuery = useQuery<RangeOverview>({
+    queryKey: ['range-overview', rangePreset],
+    queryFn: () => api.get<RangeOverview>(`/transactions/range-overview?start=${presetDates!.start}&end=${presetDates!.end}`).then((r) => r.data),
+    enabled: rangePreset !== 'month' && !!overview.data,
   });
 
   if (!overview.isLoading && overview.data === null) {
@@ -140,52 +167,110 @@ export default function DashboardPage() {
 
   return (
     <div className="max-w-7xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-        <p className="text-zinc-400 mt-1">Welcome back, {user?.email?.split("@")[0]}! Here&apos;s your financial overview.</p>
+      <div className="mb-8 flex items-start justify-between flex-wrap gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Dashboard</h1>
+          <p className="text-zinc-400 mt-1">Welcome back, {user?.email?.split("@")[0]}! Here&apos;s your financial overview.</p>
+        </div>
+        <Select value={rangePreset} onValueChange={(v) => setRangePreset(v as RangePreset)}>
+          <SelectTrigger className="w-[170px] bg-zinc-800 border-white/10 text-white">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="bg-zinc-900 border-white/10">
+            {(Object.keys(RANGE_LABELS) as RangePreset[]).map((k) => (
+              <SelectItem key={k} value={k} className="text-white focus:bg-zinc-800 focus:text-white">
+                {RANGE_LABELS[k]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <Card className="bg-zinc-900/50 border-white/10 backdrop-blur-sm">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-2 rounded-xl bg-emerald-500/10"><Wallet className="h-5 w-5 text-emerald-500" /></div>
-              {!overview.isLoading && spendDiff !== null && (
-                <div className={`flex items-center gap-1 text-sm ${Number(spendDiff) > 0 ? "text-red-500" : "text-emerald-500"}`}>
-                  {Number(spendDiff) > 0 ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
-                  {spendDiff}%
+        {rangePreset === 'month' ? (
+          <>
+            <Card className="bg-zinc-900/50 border-white/10 backdrop-blur-sm">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="p-2 rounded-xl bg-emerald-500/10"><Wallet className="h-5 w-5 text-emerald-500" /></div>
+                  {!overview.isLoading && spendDiff !== null && (
+                    <div className={`flex items-center gap-1 text-sm ${Number(spendDiff) > 0 ? "text-red-500" : "text-emerald-500"}`}>
+                      {Number(spendDiff) > 0 ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+                      {spendDiff}%
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-            <p className="text-zinc-400 text-sm">This Month</p>
-            {overview.isLoading ? <Skeleton className="h-8 w-24 bg-zinc-800 mt-1" /> : <p className="text-2xl font-bold text-white mt-1">₹{fmt(current?.total ?? 0)}</p>}
-          </CardContent>
-        </Card>
+                <p className="text-zinc-400 text-sm">This Month</p>
+                {overview.isLoading ? <Skeleton className="h-8 w-24 bg-zinc-800 mt-1" /> : <p className="text-2xl font-bold text-white mt-1">₹{fmt(current?.total ?? 0)}</p>}
+              </CardContent>
+            </Card>
 
-        <Card className="bg-zinc-900/50 border-white/10 backdrop-blur-sm">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-2 rounded-xl bg-emerald-500/10"><CreditCard className="h-5 w-5 text-emerald-500" /></div>
-            </div>
-            <p className="text-zinc-400 text-sm">Last Month</p>
-            {overview.isLoading ? <Skeleton className="h-8 w-24 bg-zinc-800 mt-1" /> : <p className="text-2xl font-bold text-white mt-1">₹{fmt(previous?.total ?? 0)}</p>}
-          </CardContent>
-        </Card>
+            <Card className="bg-zinc-900/50 border-white/10 backdrop-blur-sm">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="p-2 rounded-xl bg-emerald-500/10"><CreditCard className="h-5 w-5 text-emerald-500" /></div>
+                </div>
+                <p className="text-zinc-400 text-sm">Last Month</p>
+                {overview.isLoading ? <Skeleton className="h-8 w-24 bg-zinc-800 mt-1" /> : <p className="text-2xl font-bold text-white mt-1">₹{fmt(previous?.total ?? 0)}</p>}
+              </CardContent>
+            </Card>
 
-        <Card className="bg-zinc-900/50 border-white/10 backdrop-blur-sm">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-2 rounded-xl bg-emerald-500/10"><TrendingUp className="h-5 w-5 text-emerald-500" /></div>
-            </div>
-            <p className="text-zinc-400 text-sm">Savings This Month</p>
-            {overview.isLoading ? <Skeleton className="h-8 w-24 bg-zinc-800 mt-1" /> : (
-              <p className={`text-2xl font-bold mt-1 ${(current?.savings ?? 0) >= 0 ? "text-emerald-500" : "text-red-400"}`}>
-                ₹{fmt(current?.savings ?? 0)}
-              </p>
-            )}
-          </CardContent>
-        </Card>
+            <Card className="bg-zinc-900/50 border-white/10 backdrop-blur-sm">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="p-2 rounded-xl bg-emerald-500/10"><TrendingUp className="h-5 w-5 text-emerald-500" /></div>
+                </div>
+                <p className="text-zinc-400 text-sm">Savings This Month</p>
+                {overview.isLoading ? <Skeleton className="h-8 w-24 bg-zinc-800 mt-1" /> : (
+                  <p className={`text-2xl font-bold mt-1 ${(current?.savings ?? 0) >= 0 ? "text-emerald-500" : "text-red-400"}`}>
+                    ₹{fmt(current?.savings ?? 0)}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </>
+        ) : (
+          <>
+            <Card className="bg-zinc-900/50 border-white/10 backdrop-blur-sm">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="p-2 rounded-xl bg-red-500/10"><ArrowUpRight className="h-5 w-5 text-red-400" /></div>
+                  {rangeQuery.isLoading && <Skeleton className="h-4 w-8 bg-zinc-800" />}
+                </div>
+                <p className="text-zinc-400 text-sm">Money Out</p>
+                {rangeQuery.isLoading ? <Skeleton className="h-8 w-24 bg-zinc-800 mt-1" /> : <p className="text-2xl font-bold text-white mt-1">₹{fmt(rangeQuery.data?.totalDebit ?? 0)}</p>}
+                <p className="text-zinc-600 text-xs mt-1">{RANGE_LABELS[rangePreset]}</p>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-zinc-900/50 border-white/10 backdrop-blur-sm">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="p-2 rounded-xl bg-emerald-500/10"><ArrowDownRight className="h-5 w-5 text-emerald-500" /></div>
+                </div>
+                <p className="text-zinc-400 text-sm">Money In</p>
+                {rangeQuery.isLoading ? <Skeleton className="h-8 w-24 bg-zinc-800 mt-1" /> : <p className="text-2xl font-bold text-white mt-1">₹{fmt(rangeQuery.data?.totalIncome ?? 0)}</p>}
+                <p className="text-zinc-600 text-xs mt-1">{RANGE_LABELS[rangePreset]}</p>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-zinc-900/50 border-white/10 backdrop-blur-sm">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="p-2 rounded-xl bg-emerald-500/10"><TrendingUp className="h-5 w-5 text-emerald-500" /></div>
+                </div>
+                <p className="text-zinc-400 text-sm">Net Savings</p>
+                {rangeQuery.isLoading ? <Skeleton className="h-8 w-24 bg-zinc-800 mt-1" /> : (
+                  <p className={`text-2xl font-bold mt-1 ${(rangeQuery.data?.savings ?? 0) >= 0 ? "text-emerald-500" : "text-red-400"}`}>
+                    ₹{fmt(rangeQuery.data?.savings ?? 0)}
+                  </p>
+                )}
+                <p className="text-zinc-600 text-xs mt-1">{RANGE_LABELS[rangePreset]}</p>
+              </CardContent>
+            </Card>
+          </>
+        )}
 
         <Card className="bg-zinc-900/50 border-white/10 backdrop-blur-sm">
           <CardContent className="p-6">

@@ -7,13 +7,28 @@ export class BudgetsService {
   constructor(private prisma: PrismaService) {}
 
   async getBudgets(userId: string, month: number, year: number) {
-    // 1. Fetch budgets for the given month/year
-    const budgets = await this.prisma.budget.findMany({
+    // 1. Fetch explicit budgets for the given month/year
+    const explicit = await this.prisma.budget.findMany({
       where: { userId, month, year },
-      select: { id: true, category: true, limitAmount: true, month: true, year: true },
+      select: { id: true, category: true, limitAmount: true, month: true, year: true, recurring: true },
     });
 
-    // 2. Fetch actual spend per category for the same period
+    // 2. Fetch recurring budgets (sentinel month=0, year=0)
+    const recurring = await this.prisma.budget.findMany({
+      where: { userId, month: 0, year: 0, recurring: true },
+      select: { id: true, category: true, limitAmount: true, month: true, year: true, recurring: true },
+    });
+
+    // 3. Merge: explicit rows win; fill remaining categories from recurring
+    const explicitCategories = new Set(explicit.map((b) => b.category as string));
+    const merged = [
+      ...explicit,
+      ...recurring.filter((r) => !explicitCategories.has(r.category as string)),
+    ];
+
+    if (merged.length === 0) return [];
+
+    // 4. Fetch actual spend per category for the queried month/year
     const start = new Date(year, month - 1, 1);
     const end = new Date(year, month, 0, 23, 59, 59);
 
@@ -28,7 +43,7 @@ export class BudgetsService {
       spent[cat] = (spent[cat] ?? 0) + Number(t.amount);
     }
 
-    // 3. Compute remaining, % used, forecast
+    // 5. Compute remaining, % used, forecast
     const today = new Date();
     const daysInMonth = new Date(year, month, 0).getDate();
     const dayOfMonth = (year === today.getFullYear() && month === (today.getMonth() + 1))
@@ -36,7 +51,7 @@ export class BudgetsService {
       : daysInMonth;
     const forecastMultiplier = daysInMonth / Math.max(dayOfMonth, 1);
 
-    return budgets.map((b) => {
+    return merged.map((b) => {
       const limit = Number(b.limitAmount);
       const spentAmt = Math.round((spent[b.category as string] ?? 0) * 100) / 100;
       const remaining = Math.round((limit - spentAmt) * 100) / 100;
@@ -54,8 +69,9 @@ export class BudgetsService {
         percentUsed,
         forecast,
         status,
-        month: b.month,
-        year: b.year,
+        month: b.recurring ? month : b.month,
+        year: b.recurring ? year : b.year,
+        recurring: b.recurring,
       };
     });
   }
@@ -66,11 +82,16 @@ export class BudgetsService {
     limitAmount: number,
     month: number,
     year: number,
+    recurring: boolean,
   ) {
+    // Recurring budgets use sentinel month=0, year=0 so they match all months
+    const m = recurring ? 0 : month;
+    const y = recurring ? 0 : year;
+
     return this.prisma.budget.upsert({
-      where: { userId_category_month_year: { userId, category, month, year } },
-      create: { userId, category, limitAmount, month, year },
-      update: { limitAmount },
+      where: { userId_category_month_year: { userId, category, month: m, year: y } },
+      create: { userId, category, limitAmount, month: m, year: y, recurring },
+      update: { limitAmount, recurring },
     });
   }
 

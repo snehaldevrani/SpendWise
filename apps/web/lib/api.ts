@@ -123,6 +123,7 @@ export interface BudgetItem {
   status: BudgetStatus;
   month: number;
   year: number;
+  recurring: boolean;
 }
 
 export interface BudgetSummary {
@@ -134,4 +135,13 @@ export interface BudgetSummary {
 }
 
 export type CategoryTrendsRow = { month: string } & Record<string, number>;
+
+export interface RangeOverview {
+  totalDebit: number;
+  totalIncome: number;
+  savings: number;
+  breakdown: Array<{ category: string; total: number }>;
+  start: string;
+  end: string;
+}
 

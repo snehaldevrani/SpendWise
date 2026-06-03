@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2, Upload, TrendingUp, AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
+import { Plus, Trash2, Upload, TrendingUp, AlertTriangle, CheckCircle2, XCircle, RefreshCw } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
@@ -46,6 +47,7 @@ export default function BudgetsPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [newCategory, setNewCategory] = useState("");
   const [newLimit, setNewLimit] = useState("");
+  const [isRecurring, setIsRecurring] = useState(false);
 
   const budgetQuery = useQuery<BudgetSummary>({
     queryKey: ["budgets", month, year],
@@ -53,13 +55,14 @@ export default function BudgetsPage() {
   });
 
   const upsert = useMutation({
-    mutationFn: (body: { category: string; limitAmount: number; month: number; year: number }) =>
+    mutationFn: (body: { category: string; limitAmount: number; month?: number; year?: number; recurring: boolean }) =>
       api.post("/budgets", body).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["budgets"] });
       setAddOpen(false);
       setNewCategory("");
       setNewLimit("");
+      setIsRecurring(false);
       toast.success("Budget saved");
     },
     onError: () => toast.error("Failed to save budget"),
@@ -80,7 +83,11 @@ export default function BudgetsPage() {
       toast.error("Enter a valid category and amount");
       return;
     }
-    upsert.mutate({ category: newCategory, limitAmount: limit, month, year });
+    if (isRecurring) {
+      upsert.mutate({ category: newCategory, limitAmount: limit, recurring: true });
+    } else {
+      upsert.mutate({ category: newCategory, limitAmount: limit, month, year, recurring: false });
+    }
   };
 
   const summary = budgetQuery.data;
@@ -182,6 +189,11 @@ export default function BudgetsPage() {
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-white text-base">{catLabel}</CardTitle>
                     <div className="flex items-center gap-2">
+                      {b.recurring && (
+                        <Badge className="bg-violet-500/20 text-violet-400 border-0 text-xs">
+                          <RefreshCw className="h-3 w-3 mr-1" />Recurring
+                        </Badge>
+                      )}
                       <Badge className={`${cfg.color}/20 ${cfg.textColor} border-0 text-xs`}>
                         <cfg.icon className="h-3 w-3 mr-1" />{cfg.label}
                       </Badge>
@@ -257,6 +269,17 @@ export default function BudgetsPage() {
                 onChange={(e) => setNewLimit(e.target.value)}
                 className="bg-zinc-800 border-white/10 text-white placeholder:text-zinc-500"
                 onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+              />
+            </div>
+            <div className="flex items-center justify-between py-1">
+              <div>
+                <p className="text-sm text-white">Recurring budget</p>
+                <p className="text-xs text-zinc-500">Applies automatically every month — no need to recreate it</p>
+              </div>
+              <Switch
+                checked={isRecurring}
+                onCheckedChange={setIsRecurring}
+                className="data-[state=checked]:bg-emerald-500"
               />
             </div>
             <div className="flex gap-3 pt-2">

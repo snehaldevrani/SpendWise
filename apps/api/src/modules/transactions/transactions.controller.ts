@@ -66,6 +66,23 @@ export class TransactionsController {
     return this.transactionsService.getCategoryTrends(user.id, months ? parseInt(months, 10) : 6);
   }
 
+  /**
+   * Aggregate money-in / money-out across an arbitrary date window.
+   * Query params: start=YYYY-MM-DD  end=YYYY-MM-DD
+   */
+  @Get('range-overview')
+  getRangeOverview(
+    @CurrentUser() user: AuthUser,
+    @Query('start') start: string,
+    @Query('end') end: string,
+  ) {
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+    // Set end to 23:59:59 so the full last day is included
+    endDate.setHours(23, 59, 59, 999);
+    return this.transactionsService.getRangeOverview(user.id, startDate, endDate);
+  }
+
   @Patch(':id/category')
   updateCategory(
     @CurrentUser() user: AuthUser,

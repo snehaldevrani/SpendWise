@@ -178,4 +178,41 @@ export class TransactionsService {
 
     return results;
   }
+
+  /**
+   * Aggregate transactions across an arbitrary date range.
+   * Used by the dashboard range-overview endpoint so users can view
+   * money in/out for 2, 3, or 6 months instead of only the current month.
+   */
+  async getRangeOverview(userId: string, start: Date, end: Date) {
+    const txns = await this.prisma.transaction.findMany({
+      where: { userId, date: { gte: start, lte: end } },
+      select: { category: true, amount: true, type: true },
+    });
+
+    const breakdown: Record<string, number> = {};
+    let totalDebit = 0;
+    let totalIncome = 0;
+
+    for (const t of txns) {
+      const amt = Number(t.amount);
+      if (t.type === 'debit') {
+        totalDebit += amt;
+        breakdown[t.category as string] = (breakdown[t.category as string] ?? 0) + amt;
+      } else {
+        totalIncome += amt;
+      }
+    }
+
+    return {
+      totalDebit: Math.round(totalDebit * 100) / 100,
+      totalIncome: Math.round(totalIncome * 100) / 100,
+      savings: Math.round((totalIncome - totalDebit) * 100) / 100,
+      breakdown: Object.entries(breakdown)
+        .map(([category, total]) => ({ category, total: Math.round(total * 100) / 100 }))
+        .sort((a, b) => b.total - a.total),
+      start: start.toISOString().slice(0, 10),
+      end: end.toISOString().slice(0, 10),
+    };
+  }
 }
