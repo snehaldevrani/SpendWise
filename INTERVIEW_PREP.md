@@ -4,7 +4,7 @@
 
 ## Part 1: The One-Paragraph Pitch
 
-> "SpendWise is a full-stack AI personal finance platform. Users upload bank statements, and the system automatically categorises transactions, detects recurring subscriptions, generates weekly spending summaries, and provides an AI assistant that answers questions grounded in your own transaction history using RAG. It also ships an MCP server, so Claude Desktop can natively query your finances as first-class tools. The stack is NestJS + Next.js 15, PostgreSQL with pgvector for semantic search, Redis + BullMQ for async job processing, Google Gemini 2.5 Flash for AI chat and recommendations, and Gemini embedding-2 for 768-dim vector embeddings. The project originally used Claude Sonnet 4.6 and Voyage AI, but I migrated to Gemini for cost reasons — the free tier is generous enough for a real product. Auth uses httpOnly cookies — no tokens in localStorage. Everything that can fail asynchronously runs through a retryable BullMQ queue."
+> "SpendWise is a full-stack AI personal finance platform. Users upload bank statements, and the system automatically categorises transactions, detects recurring subscriptions, generates weekly spending summaries, and provides an AI assistant that answers questions grounded in your own transaction history using RAG. The dashboard supports flexible date range views (1–6 months) and the budgets page lets you set recurring budgets that auto-apply every month without recreation. Upload progress is streamed live to the browser over SSE — three BullMQ job steps show real-time status in the upload dialog. It also ships an MCP server, so Claude Desktop can natively query your finances as first-class tools. The stack is NestJS + Next.js 15, PostgreSQL with pgvector for semantic search, Redis + BullMQ for async job processing, Google Gemini 2.5 Flash for AI chat and recommendations, and Gemini embedding-2 for 768-dim vector embeddings. Auth uses httpOnly cookies — no tokens in localStorage. Everything that can fail asynchronously runs through a retryable BullMQ queue."
 
 ---
 
@@ -53,7 +53,12 @@ NestJS REST API  ???????????? MCP Server (6 tools)
    a. JOB_EMBED_TRANSACTIONS  → Gemini gemini-embedding-2 embeds each transaction → pgvector (768-dim)
    b. JOB_DETECT_SUBSCRIPTIONS → stddev confidence scoring → Subscription table
    c. JOB_COMPUTE_INSIGHTS   → weekly summaries → Insight table
-7. All 3 jobs: 3 attempts with exponential backoff on failure
+7. All 3 job IDs returned in POST /uploads/csv response as `jobIds: string[]`
+8. Browser opens EventSource to GET /uploads/progress?jobs=id1,id2,id3 (withCredentials: true)
+   → NestJS @Sse endpoint uses RxJS interval(1500).pipe(exhaustMap, takeWhile, take(200))
+   → polls BullMQ job states every 1.5 s
+   → browser shows live step indicators until payload.done === true
+9. All 3 jobs: 3 attempts with exponential backoff on failure
 ```
 
 ### Request Flow: RAG Chat
@@ -116,7 +121,7 @@ Embedding 500 transactions via Voyage AI takes ~3-8 seconds. Doing that synchron
 | `JOB_EMBED_TRANSACTIONS` | Calls Voyage AI for batch embeddings, upserts into pgvector | External API call, rate limits |
 | `JOB_DETECT_SUBSCRIPTIONS` | Groups by merchant, runs stddev scoring, upserts Subscription rows | DB constraint, edge cases in data |
 | `JOB_COMPUTE_INSIGHTS` | Groups by ISO week, aggregates totals, upserts Insight rows | DB write failure |
-
+After all 3 jobs are enqueued, their IDs are returned in the upload response. The browser opens an SSE connection to `GET /uploads/progress?jobs=...` and receives per-job status frames every 1.5 s until `done: true`.
 **Interview question:**
 > "What happens if JOB_EMBED_TRANSACTIONS fails?"
 
@@ -319,7 +324,75 @@ Key cross-module wiring:
 
 ---
 
-### 3.9 Data Storage & Security
+### 3.10 SSE Real-time Import Progress
+
+**Why SSE over polling?**
+
+The browser could poll `GET /uploads/status?jobId=...` every 2 seconds. SSE is cleaner: the server pushes updates as they happen. No repeated request overhead, and the connection closes automatically when the Observable completes. NestJS has a first-class `@Sse` decorator that returns `Observable<MessageEvent>` — no WebSocket handshake, no socket.io, just a long-lived HTTP response with `Content-Type: text/event-stream`.
+
+**Why SSE over WebSockets?**
+
+Upload progress is **unidirectional** — server sends status to browser, browser never sends back. WebSockets add bidirectional capability we don't need, plus extra handshake and keepalive complexity. SSE maps perfectly to a one-way status stream and is simpler to implement and debug.
+
+**The RxJS pipeline:**
+
+```typescript
+return new Observable<MessageEvent>((subscriber) => {
+  interval(1500).pipe(
+    exhaustMap(async () => { /* poll BullMQ job states */ }),
+    takeWhile((payload) => !payload.done, /* inclusive= */ true),
+    take(200), // 5-min safety cap
+  ).subscribe(subscriber);
+});
+```
+
+**`exhaustMap` vs `switchMap`:**
+- `exhaustMap` — if the current inner Observable (the async poll) hasn't finished, new source ticks are dropped. This avoids a growing backlog of overlapping polls if BullMQ is slow to respond.
+- `switchMap` would cancel the in-flight poll on every new tick — could cause polls to never complete and miss the final `done` state.
+
+**`takeWhile(..., true)` — the inclusive flag:**
+Without `true`, `takeWhile` unsubscribes the moment the predicate is false — the final `done: true` frame is never emitted and the browser never gets the completion signal. The `true` (inclusive) flag emits one final frame even when the predicate turns false.
+
+**Auth on SSE:**
+The browser opens `new EventSource(url, { withCredentials: true })`. This sends the httpOnly access cookie automatically — the same JWT guard that protects every other endpoint also protects the SSE route. No token management code needed in the frontend.
+
+**Interview question:**
+> "Why did you return jobIds from the upload endpoint instead of streaming directly?"
+
+**Your answer:**
+> "Separation of concerns. The upload endpoint does one thing: parse, validate, save, enqueue. The progress endpoint does one thing: stream job status. Coupling them would mean the SSE connection has to stay alive for the entire upload AND processing pipeline. By returning jobIds and letting the browser open a separate SSE connection, the upload response is fast and the progress stream is independent. The user sees the upload succeed immediately, then watches processing live."
+
+---
+
+### 3.11 Recurring Budgets
+
+**The problem:** Users don't want to recreate a ₹500 Food budget every month — it should just carry over.
+
+**Implementation:**
+- A `recurring Boolean @default(false)` column was added to the `Budget` model in Prisma
+- Recurring budgets are stored with the sentinel values `month=0, year=0` in the DB
+- `getBudgets(userId, month, year)` fetches two sets: explicit rows for that month/year AND all `month=0, year=0` rows. They're merged by category — the explicit row wins if both exist.
+- `upsertBudget` forces `month=0, year=0` when `recurring: true` is passed in the DTO
+- The frontend sends `{ recurring: true }` (omitting month/year) for recurring budgets; the controller uses `now` as the fallback only for non-recurring requests
+
+**Interview question:**
+> "Why a sentinel value (month=0) instead of a separate table?"
+
+**Your answer:**
+> "A separate table adds a JOIN and another migration. The sentinel approach fits in the existing schema with a single migration adding one boolean column. The merge logic is in the service layer and is easy to test in isolation. At this scale, the simplicity win is worth the minor schema oddity. month=0 is a clear marker — no real calendar month is 0."
+
+---
+
+### 3.12 Dashboard Date Range
+
+**Feature:** A dropdown on the dashboard lets users switch between "This month", "Last 2 months", "Last 3 months", and "Last 6 months" for their stat cards.
+
+**Implementation:**
+- A new `GET /transactions/range-overview?start=YYYY-MM-DD&end=YYYY-MM-DD` endpoint aggregates `totalDebit`, `totalIncome`, `savings`, and per-category breakdown over any arbitrary date window
+- The frontend uses a `rangePreset` state. When it's `'month'`, the existing `/transactions/overview` call is used (This Month vs Last Month). When it's a multi-month preset, `rangeQuery` is enabled pointing at the new endpoint
+- The stat cards swap between a two-column "this vs last" layout and a three-column "Money Out / Money In / Net Savings" layout depending on the preset
+
+---
 
 This section is critical for a fintech project — interviewers will probe it directly.
 
@@ -373,7 +446,7 @@ Explain the full cookie flow: signup ? tokens set as httpOnly cookies ? every AP
 
 **"What would you add if you had more time?"**
 
-> "Three things. First, hybrid search — combine pgvector cosine similarity with full-text search on merchant names so users can search by exact merchant name alongside semantic queries. Second, scanned PDF support via an OCR pipeline (e.g. Tesseract) — digital PDFs are already supported using pdf-parse, but image-based PDFs from older bank branches still require OCR. Third, a Bull Board dashboard for the BullMQ queues so I can see job health, retry failed jobs, and monitor throughput without SSH-ing into the server."
+> "Two things. First, hybrid search — combine pgvector cosine similarity with full-text search on merchant names so users can search by exact merchant name alongside semantic queries. Second, scanned PDF support via an OCR pipeline (e.g. Tesseract) — digital PDFs are already supported using pdf-parse, but image-based PDFs from older bank branches still require OCR. The SSE import progress, recurring budgets, and dashboard date range are already shipped."
 
 **"How do you handle sensitive financial data?"**
 
@@ -391,6 +464,7 @@ Explain the full cookie flow: signup ? tokens set as httpOnly cookies ? every AP
 |----------|---------------|-----------------|---------------|
 | httpOnly cookies over localStorage | XSS safety | Slightly more complex refresh flow | Worth it — token theft is a real attack |
 | BullMQ over sync processing | Resilience, non-blocking uploads | Added complexity (Redis dependency) | Users shouldn't wait 8 seconds for embeddings |
+| SSE over WebSockets for progress | Server-push, simpler, NestJS `@Sse` native, no handshake | Bidirectional communication not possible | One-way status stream is all that's needed |
 | pgvector over Pinecone | Single service, SQL joins | Scale ceiling (~10M vectors) | More than enough for this use case |
 | Gemini over Claude + Voyage | Free tier, single API key | Claude's more reliable structured output | Gemini 2.5 Flash handles JSON output well enough; cost wins |
 | gemini-embedding-2 with outputDimensionality | 768-dim, compatible with existing schema | Native 3072-dim would be higher quality | Matryoshka truncation retains quality; smaller vectors = faster search |
@@ -399,6 +473,7 @@ Explain the full cookie flow: signup ? tokens set as httpOnly cookies ? every AP
 | Global exception filter | Consistent error shape, no stack traces in prod | Slightly less granular per-route control | One place to change error format for the whole API |
 | pdf-parse for PDF import | Digital PDFs supported with no external service | Scanned/image PDFs not supported | Covers all major Indian bank net banking exports; OCR is out-of-scope for now |
 | UPI ID sanitisation before Gemini | Reduced PII in prompts | Slightly more processing per transaction | Stripping reference numbers is cheap; keeps brand names that AI needs |
+| Recurring budget sentinel (month=0,year=0) | No extra table, fits existing schema | Slightly unconventional DB value | month=0 is unambiguous; merge logic is in service layer, easy to test |
 
 ---
 
@@ -421,6 +496,11 @@ Explain the full cookie flow: signup ? tokens set as httpOnly cookies ? every AP
 | MCP server | Node.js process exposing SpendWise as 6 typed tools Claude Desktop can call natively via MCP protocol |
 | Global exception filter | `@Catch()` decorator catches all unhandled exceptions and returns consistent JSON error responses |
 | TanStack Query | Client-side data fetching with automatic caching, background refetch, and request deduplication |
+| `@Sse` | NestJS decorator that returns `Observable<MessageEvent>` — Node.js streams one JSON frame per SSE tick to the connected browser client |
+| `exhaustMap` | RxJS operator that ignores new source emissions while the current inner Observable hasn't completed — prevents poll queue buildup when BullMQ is slow |
+| `takeWhile(pred, true)` | Inclusive variant — emits one final event even when the predicate turns false, so the browser sees the `done: true` completion frame |
+| Recurring budget | `month=0, year=0` sentinel in DB; service merges explicit + recurring rows per category, explicit wins |
+| `RangeOverview` | `GET /transactions/range-overview?start=&end=` — aggregates totalDebit/totalIncome/savings for any arbitrary date window |
 
 ---
 
@@ -429,6 +509,10 @@ Explain the full cookie flow: signup ? tokens set as httpOnly cookies ? every AP
 **"Tell me about a challenging technical problem in SpendWise."**
 
 > "The AI chat was giving confidently wrong answers — it would say the biggest transaction was Amazon ₹844 when the actual largest was a ₹14,000 charge. The root cause was subtle: pure cosine similarity retrieves the 8 most semantically similar chunks, not the numerically largest ones. A ₹14,000 charge from an obscure merchant doesn't necessarily match the query 'biggest transaction' semantically. The fix was to stop treating RAG as the only data source. The chat method now fetches all transactions from the DB sorted by amount, pre-computes summary stats (total debits, category breakdown, largest single debit), and injects the complete structured context alongside the RAG chunks. The AI then answers from complete data, not a semantic sample. The lesson: vector similarity search is not a substitute for direct data access on factual/aggregate questions."
+
+**"Tell me about another interesting systems problem you solved."**
+
+> "SSE real-time import progress. After uploading a file, users had no idea what was happening — three BullMQ jobs were running silently in the background. I wanted to show live step indicators without polling. NestJS has a `@Sse` decorator that returns `Observable<MessageEvent>`, so I built a pipeline: `interval(1500).pipe(exhaustMap(async () => { /* poll BullMQ */ }), takeWhile(pred, true), take(200))`. The tricky part was operator choice: `exhaustMap` was critical — it drops new ticks if the previous poll is still running, preventing a backlog of overlapping BullMQ queries. And the `true` flag on `takeWhile` is the inclusive variant — without it the final `done: true` frame is swallowed before the browser sees it. Auth worked automatically because EventSource sends httpOnly cookies with `withCredentials: true`. The whole thing — backend Observable + browser EventSource + live UI — came together cleanly once I got those two RxJS details right."
 
 **"Why did you build SpendWise?"**
 

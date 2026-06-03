@@ -17,12 +17,14 @@ Upload your bank statement once. SpendWise automatically categorises every trans
 | Feature | Details |
 |---------|---------|
 | **Multi-bank statement import** | HDFC, ICICI, SBI, Axis Bank, Kotak — CSV, XLSX, and PDF formats; automatic column alias normalisation, magic-byte validation, deduplication |
+| **Real-time import progress** | After upload, an SSE stream (`GET /uploads/progress`) polls BullMQ job states every 1.5 s; upload dialog shows three live step indicators (embed → subscriptions → insights) updating in real time |
 | **Smart categorisation** | 9 categories (Food, Travel, Utilities, Entertainment, Health, Shopping, Subscriptions, Income, Other) — keyword-based auto-classify, inline editing |
 | **Subscription leak detection** | Confidence-scored recurring charge detection across 6 billing cycles (7/14/30/90/180/365 days); flags unused subscriptions with annual cost |
-| **Monthly budgets** | Set per-category spending limits; live progress bars, prorated month-end forecast, health score |
+| **Monthly & recurring budgets** | Per-category budgets with a Recurring toggle — one recurring budget auto-applies every month; explicit month budgets override recurring for that month; live progress bars, prorated forecast, health score |
+| **Dashboard date range** | Dropdown to view stat cards across This month / Last 2 months / Last 3 months / Last 6 months — aggregates Money Out / Money In / Net Savings over the selected window |
 | **6-month category trends** | Stacked bar chart showing month-by-month spend across all categories |
 | **Weekly spending summaries** | ISO-week groupings with total spend, income, category breakdown, top merchants |
-| **RAG AI chat** | Ask questions about your own finances; Gemini `gemini-embedding-2` embeddings + pgvector cosine search provides supplemental context; full transaction history injected into every prompt for factually accurate answers |
+| **RAG AI chat** | Ask questions about your own finances; Gemini `gemini-embedding-2` embeddings + pgvector cosine search provides supplemental context; full transaction history injected into every prompt for factually accurate answers; chat history persisted in localStorage across navigation |
 | **AI recommendations** | Structured savings recommendations: top leaks, estimated monthly savings, action checklist — Redis-cached 6h, per-user rate limited |
 | **Weekly email digest** | Every Monday: last week's spend, income, net savings, top categories and merchants — opt-in via Settings |
 | **Email alerts** | New subscription leak detected → immediate notification |
@@ -112,11 +114,11 @@ SpendWise/
 │       ├── app/
 │       │   ├── (auth)/             /login, /signup
 │       │   └── (dashboard)/
-│       │       ├── dashboard/      Stat cards, area chart, recent transactions
+│       │       ├── dashboard/      Stat cards (with date range), area chart, recent transactions
 │       │       ├── transactions/   Table, search, filters, CSV export, inline edit
 │       │       ├── subscriptions/  Leak cards, dismiss/confirm
-│       │       ├── budgets/        Budget CRUD, progress bars, forecast
-│       │       ├── insights/       AI chat, weekly cards, 6-month trends chart
+│       │       ├── budgets/        Budget CRUD (monthly + recurring), progress bars, forecast
+│       │       ├── insights/       AI chat (persisted), weekly cards, 6-month trends chart
 │       │       └── settings/       Notification preferences
 │       ├── components/             shadcn/ui + custom layout components
 │       ├── store/                  Zustand: auth, UI state
@@ -246,14 +248,14 @@ Click **Upload Statement** from the sidebar or dashboard. After upload, three ba
 2. **Detect subscriptions** — recurring charges are scored and flagged
 3. **Compute insights** — weekly summaries are calculated
 
-Processing typically completes in under 30 seconds.
+The upload dialog shows **live step indicators** for all three jobs as they complete, powered by an SSE stream from the API. Processing typically completes in under 30 seconds.
 
 > **PDF uploads:** `pdf-parse` extracts text from digital PDFs. Each line beginning with a date pattern is treated as a transaction row. Works with all major Indian bank digital statements.
 
 ### 4. Dashboard
 
 The dashboard shows:
-- This month's spend, last month's spend, net savings, active subscription count
+- Stat cards with a **date range dropdown** — choose This month, Last 2 months, Last 3 months, or Last 6 months. Single-month view shows This Month vs Last Month spend comparison; multi-month view shows aggregated Money Out / Money In / Net Savings
 - Daily spending area chart (last 60 days)
 - Monthly category donut chart
 - 5 most recent transactions
@@ -275,11 +277,13 @@ Click **Dismiss** on false positives (e.g. rent). Click **Confirm** to lock in a
 
 ### 7. Budgets
 
-Set per-category monthly spending limits. Each budget card shows:
+Set per-category spending limits. Each budget card shows:
 - Live progress bar (green → amber → red as you approach the limit)
 - Prorated month-end forecast
 - Remaining balance
 - Overall budget health score
+
+Toggle **Recurring** when creating a budget — it applies automatically every month. An explicit budget for a specific month always overrides the recurring one for that month.
 
 ### 8. Insights
 
@@ -337,6 +341,10 @@ CSV / XLSX / PDF upload
             Group by ISO week → compute totals, category breakdown, top merchants
             → upsert weekly Insight records
 
+All 3 job IDs returned in POST /uploads/csv response → frontend opens
+EventSource to GET /uploads/progress?jobs=id1,id2,id3 → SSE stream
+pushes per-job status every 1.5 s until all complete.
+
 Weekly cron (Mon 08:00 IST):
     └─► Send weekly digest email to opted-in users
 ```
@@ -357,19 +365,21 @@ Key endpoints:
 | `POST` | `/api/auth/login` | Login, sets cookies |
 | `POST` | `/api/auth/refresh` | Silent token rotation |
 | `POST` | `/api/auth/logout` | Clear cookies |
-| `POST` | `/api/uploads/csv` | Upload bank statement |
+| `POST` | `/api/uploads/csv` | Upload bank statement; returns `jobIds[]` |
+| `GET` | `/api/uploads/progress` | SSE stream — real-time BullMQ job status (`?jobs=id1,id2,id3`) |
 | `GET` | `/api/transactions` | List with pagination, search, filters |
 | `PATCH` | `/api/transactions/:id/category` | Edit transaction category |
-| `GET` | `/api/transactions/overview` | Dashboard stat cards |
+| `GET` | `/api/transactions/overview` | Dashboard stat cards (current vs previous month) |
+| `GET` | `/api/transactions/range-overview` | Aggregated stats across arbitrary date window (`?start=&end=`) |
 | `GET` | `/api/transactions/category-trends` | 6-month stacked spend data |
 | `GET` | `/api/subscriptions` | All detected subscriptions |
 | `GET` | `/api/subscriptions/leaks` | Flagged unused subscriptions |
-| `GET` | `/api/budgets` | Budget summary for a month |
-| `POST` | `/api/budgets` | Create or update a budget |
+| `GET` | `/api/budgets` | Budget summary for a month (merges recurring + monthly) |
+| `POST` | `/api/budgets` | Create or update a budget (`recurring: true` for all-months) |
 | `DELETE` | `/api/budgets/:id` | Remove a budget |
 | `GET` | `/api/insights` | Weekly insight cards |
 | `GET` | `/api/ai/recommendations` | Gemini 2.5 Flash savings advice (cached 6h, rate-limited 4/day) |
-| `POST` | `/api/ai/chat` | RAG-augmented AI chat |
+| `POST` | `/api/ai/chat` | RAG-augmented AI chat (accepts `history[]` for multi-turn) |
 | `GET` | `/api/users/preferences` | Notification settings |
 | `PATCH` | `/api/users/preferences` | Update notification settings |
 | `GET` | `/health` | Health check |
