@@ -62,6 +62,8 @@ export interface CsvImportResult {
         row: number;
         message: string;
     }>;
+    /** BullMQ job IDs for SSE progress tracking: [embed, subscriptions, insights] */
+    jobIds?: string[];
 }
 export interface CategoryBreakdown {
     category: TransactionCategory;

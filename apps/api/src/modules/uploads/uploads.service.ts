@@ -71,21 +71,29 @@ export class UploadsService {
       // Bust AI recommendations cache — new data means stale insights
       await this.cache.del(`ai:recs:${userId}`);
 
-      await this.importQueue.add(
+      const embedJob = await this.importQueue.add(
         JOB_EMBED_TRANSACTIONS,
         { userId },
         { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
       );
-      await this.importQueue.add(
+      const subsJob = await this.importQueue.add(
         JOB_DETECT_SUBSCRIPTIONS,
         { userId },
         { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
       );
-      await this.importQueue.add(
+      const insightsJob = await this.importQueue.add(
         JOB_COMPUTE_INSIGHTS,
         { userId },
         { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
       );
+
+      return {
+        inserted,
+        skipped,
+        failed: errors.length,
+        errors,
+        jobIds: [embedJob.id!, subsJob.id!, insightsJob.id!],
+      };
     }
 
     return { inserted, skipped, failed: errors.length, errors };

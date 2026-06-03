@@ -1,5 +1,5 @@
 'use client';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { UploadCloud, FileText, CheckCircle, AlertCircle, Loader2, X, Lock, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
@@ -12,7 +12,19 @@ import { api } from '@/lib/api';
 import { useUIStore } from '@/store';
 import type { CsvImportResult } from '@/lib/types';
 
-type UploadState = 'idle' | 'selected' | 'confirm' | 'uploading' | 'done' | 'error';
+type UploadState = 'idle' | 'selected' | 'confirm' | 'uploading' | 'processing' | 'done' | 'error';
+
+interface ProcessingStep {
+  name: string;
+  status: string;
+}
+
+interface ProgressPayload {
+  steps: ProcessingStep[];
+  percent: number;
+  done: boolean;
+  hasFailures: boolean;
+}
 
 const ACCEPTED = '.csv,.xlsx,.xls,.pdf';
 
@@ -37,6 +49,38 @@ export function UploadDialog() {
   const [progress, setProgress] = useState(0);
   const [dragOver, setDragOver] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [jobIds, setJobIds] = useState<string[]>([]);
+  const [processingSteps, setProcessingSteps] = useState<ProcessingStep[]>([]);
+
+  // ── SSE: stream background job progress once upload completes ──────────────
+  useEffect(() => {
+    if (state !== 'processing' || !jobIds.length) return;
+
+    const url = `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api'}/uploads/progress?jobs=${jobIds.join(',')}`;
+    const es = new EventSource(url, { withCredentials: true });
+
+    es.onmessage = (e: MessageEvent<string>) => {
+      try {
+        const payload = JSON.parse(e.data) as ProgressPayload;
+        setProcessingSteps(payload.steps);
+        if (payload.done) {
+          es.close();
+          queryClient.invalidateQueries();
+          setState('done');
+        }
+      } catch {
+        // ignore malformed frames
+      }
+    };
+
+    es.onerror = () => {
+      es.close();
+      // Fail gracefully — user already has their transactions
+      setState('done');
+    };
+
+    return () => es.close();
+  }, [state, jobIds, queryClient]);
 
   const handleFile = useCallback((f: File) => {
     const ext = f.name.toLowerCase();
@@ -78,12 +122,26 @@ export function UploadDialog() {
       clearInterval(tick);
       setProgress(100);
       setResult(data);
-      setState('done');
 
       if (data.inserted > 0) {
         setTimeout(() => confetti({ particleCount: 60, spread: 60, origin: { y: 0.5 } }), 200);
         queryClient.invalidateQueries();
         toast.success(`${data.inserted} transactions imported`);
+
+        if (data.jobIds?.length) {
+          setJobIds(data.jobIds);
+          // Show all 3 steps as waiting initially
+          setProcessingSteps([
+            { name: 'Generating embeddings', status: 'waiting' },
+            { name: 'Detecting subscriptions', status: 'waiting' },
+            { name: 'Computing insights', status: 'waiting' },
+          ]);
+          setState('processing');
+        } else {
+          setState('done');
+        }
+      } else {
+        setState('done');
       }
     } catch (err: unknown) {
       clearInterval(tick);
@@ -102,6 +160,8 @@ export function UploadDialog() {
     setResult(null);
     setProgress(0);
     setErrorMsg('');
+    setJobIds([]);
+    setProcessingSteps([]);
   };
 
   const close = () => {
@@ -240,6 +300,39 @@ export function UploadDialog() {
             <p className="text-sm text-center text-muted-foreground">
               {progress < 30 ? 'Uploading...' : progress < 60 ? 'Parsing transactions...' : progress < 85 ? 'Categorizing...' : 'Detecting subscriptions...'}
             </p>
+          </div>
+        )}
+
+        {state === 'processing' && result && (
+          <div className="space-y-5 py-2">
+            <div className="flex flex-col items-center gap-2">
+              <CheckCircle className="h-10 w-10 text-[var(--color-success)]" />
+              <p className="text-base font-semibold text-foreground">{result.inserted} transactions imported</p>
+              <p className="text-xs text-muted-foreground">AI is processing your data in the background\u2026</p>
+            </div>
+            <div className="space-y-2.5">
+              {processingSteps.map((step, i) => {
+                const isDone = step.status === 'completed';
+                const isFailed = step.status === 'failed';
+                const isActive = step.status === 'active';
+                return (
+                  <div key={i} className="flex items-center gap-3 text-sm">
+                    {isDone ? (
+                      <CheckCircle className="h-4 w-4 text-[var(--color-success)] flex-shrink-0" />
+                    ) : isFailed ? (
+                      <AlertCircle className="h-4 w-4 text-destructive flex-shrink-0" />
+                    ) : isActive ? (
+                      <Loader2 className="h-4 w-4 text-[var(--color-brand)] animate-spin flex-shrink-0" />
+                    ) : (
+                      <div className="h-4 w-4 rounded-full border border-border flex-shrink-0" />
+                    )}
+                    <span className={isDone ? 'text-muted-foreground line-through' : 'text-foreground'}>
+                      {step.name}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 

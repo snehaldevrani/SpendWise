@@ -85,6 +85,8 @@ export interface CsvImportResult {
   skipped: number;
   failed: number;
   errors: Array<{ row: number; message: string }>;
+  /** BullMQ job IDs for SSE progress tracking: [embed, subscriptions, insights] */
+  jobIds?: string[];
 }
 
 // Monthly summary
