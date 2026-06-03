@@ -26,6 +26,7 @@ const COLUMN_MAP: Record<string, string> = {
   'transaction date': 'date',
   'txn date': 'date',
   'value date': 'date',
+  'source date': 'date',
   merchant: 'merchant',
   description: 'merchant',
   narration: 'merchant',
@@ -83,6 +84,13 @@ function parseAmount(raw: string): number {
 
 function parseDate(raw: string): Date {
   const cleaned = raw.trim();
+
+  // Excel serial number (e.g. 46118, 46118.5)
+  if (/^\d{4,5}(\.\d+)?$/.test(cleaned)) {
+    const serial = parseFloat(cleaned);
+    const date = new Date((serial - 25569) * 86400 * 1000);
+    if (!isNaN(date.getTime())) return date;
+  }
 
   // DD/MM/YY (2-digit year — HDFC format)
   const shortYear = cleaned.match(/^(\d{2})[\/\-](\d{2})[\/\-](\d{2})$/);
