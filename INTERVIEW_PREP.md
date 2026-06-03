@@ -39,18 +39,21 @@ NestJS REST API  ???????????? MCP Server (6 tools)
             ??? JOB_COMPUTE_INSIGHTS
 ```
 
-### Request Flow: CSV Upload
+### Request Flow: CSV / XLSX / PDF Upload
 
 ```text
-1. User uploads CSV via multipart/form-data
-2. CsvParserService normalises bank-specific column aliases
-   (HDFC: "Withdrawal Amt." ? amount; ICICI: "Transaction Amount" ? amount)
-3. Transactions saved to DB
-4. Three BullMQ jobs enqueued in order:
+1. User uploads file via multipart/form-data (CSV, XLSX, or PDF)
+2. Magic-byte validation: PDF must start with %PDF (25 50 44 46), XLSX with PK header
+3. For PDF: pdf-parse extracts raw text; each line starting with a date pattern is parsed as a transaction row (date + description + decimal amounts + CR/DR marker)
+   For CSV/XLSX: CsvParserService normalises bank-specific column aliases
+   (HDFC: "Withdrawal Amt." → amount; BankStatementWizard: "Source Date" overrides serial-number "Date" column)
+4. UPI reference IDs stripped from merchant names before any DB write or AI call
+5. Transactions saved to DB
+6. Three BullMQ jobs enqueued in order:
    a. JOB_EMBED_TRANSACTIONS  → Gemini gemini-embedding-2 embeds each transaction → pgvector (768-dim)
-   b. JOB_DETECT_SUBSCRIPTIONS ? stddev confidence scoring ? Subscription table
-   c. JOB_COMPUTE_INSIGHTS   ? weekly summaries ? Insight table
-5. All 3 jobs: 3 attempts with exponential backoff on failure
+   b. JOB_DETECT_SUBSCRIPTIONS → stddev confidence scoring → Subscription table
+   c. JOB_COMPUTE_INSIGHTS   → weekly summaries → Insight table
+7. All 3 jobs: 3 attempts with exponential backoff on failure
 ```
 
 ### Request Flow: RAG Chat
@@ -63,8 +66,9 @@ NestJS REST API  ???????????? MCP Server (6 tools)
 5. AiService fetches ALL transactions from DB sorted by amount desc — pre-computes
    total debits/credits, category breakdown, largest single debit
 6. Full transaction list + RAG chunks both injected into Gemini 2.5 Flash system prompt
-7. Claude answers grounded in complete, accurate transaction data
+7. Gemini answers grounded in complete, accurate transaction data
 8. AI can only see the user's own data (userId scoping on every query)
+9. UPI reference IDs are sanitised before the prompt is built — merchant names like "UPIAR/013914520250/DR/Zomato" become "Zomato"
 ```
 
 ---
@@ -342,18 +346,18 @@ This section is critical for a fintech project — interviewers will probe it di
 - CORS locked to the Vercel frontend URL via `FRONTEND_URL` env var
 
 **What Gemini receives:**
-Transaction descriptions, amounts, categories, and dates are sent to Google's Gemini API as plain text in prompts. No user email, name, or password is ever sent. This is the main privacy trade-off:
+Sanitised merchant names (UPI reference IDs stripped), amounts, categories, and dates are sent to Google's Gemini API as plain text in prompts. No user email, name, or password is ever sent. Raw UPI strings like `UPIAR/013914520250/DR/Zomato` become `Zomato` before leaving the server. This is the main privacy trade-off:
 
 **Interview question:**
 > "You're sending financial transaction data to a third-party AI. Isn't that a privacy concern?"
 
 **Your answer:**
-> "Yes, and it's a deliberate trade-off I'd address in a production product. What Gemini sees is anonymised financial records — merchant name, amount, category, date. No user identity (email, name, address) is included in the prompt. Google's standard API terms of service cover this usage. A stronger production approach would be a locally-hosted embedding model (e.g. a quantised sentence-transformer) so no financial text leaves the infrastructure at all. For a demo project, the Google AI Studio free tier with standard data handling is an acceptable starting point. I've documented this trade-off explicitly."
+> "Yes, and it's a deliberate trade-off I'd address in a production product. What Gemini sees is sanitised financial records — merchant brand names, amounts, categories, dates. Raw UPI reference IDs (e.g. `UPIAR/013914520250/DR/`) are stripped from merchant names before any prompt is built, so Gemini only ever sees 'Zomato' not the full UPI identifier. No user identity (email, name, address) is included in the prompt. Google's standard API terms of service cover this usage. A stronger production approach would be a locally-hosted embedding model (e.g. a quantised sentence-transformer) so no financial text leaves the infrastructure at all. For a demo project, the Google AI Studio free tier with UPI scrubbing and no identity data in prompts is an acceptable starting point. I've documented this trade-off explicitly."
 
 **What's NOT done (and why that's fine to say):**
 - No column-level encryption on the `transactions` table — Neon's volume encryption covers the data at rest; column-level encryption would require application-layer decryption on every query, adding latency and complexity not justified at this scale
-- No PII scrubbing pipeline before Gemini calls — worth adding for production with real users
 - No data residency controls — Neon and Render run in US regions; relevant if building for EU users (GDPR)
+- Scanned/image PDF support — digital PDFs (net banking downloads) are handled; OCR for scanned PDFs is out of scope for now
 
 ---
 
@@ -369,15 +373,15 @@ Explain the full cookie flow: signup ? tokens set as httpOnly cookies ? every AP
 
 **"What would you add if you had more time?"**
 
-> "Three things. First, hybrid search — combine pgvector cosine similarity with full-text search on merchant names so users can search by exact merchant name alongside semantic queries. Second, PDF parsing — most Indian banks export PDFs, not CSVs. Third, a Bull Board dashboard for the BullMQ queues so I can see job health, retry failed jobs, and monitor throughput without SSH-ing into the server."
+> "Three things. First, hybrid search — combine pgvector cosine similarity with full-text search on merchant names so users can search by exact merchant name alongside semantic queries. Second, scanned PDF support via an OCR pipeline (e.g. Tesseract) — digital PDFs are already supported using pdf-parse, but image-based PDFs from older bank branches still require OCR. Third, a Bull Board dashboard for the BullMQ queues so I can see job health, retry failed jobs, and monitor throughput without SSH-ing into the server."
 
 **"How do you handle sensitive financial data?"**
 
-> "Data in transit: HTTPS only, httpOnly cookies prevent JavaScript access. Data at rest: PostgreSQL with encrypted disk volumes in production. Application layer: every query is scoped by userId — no cross-user data access is architecturally possible. No PII is sent to Gemini — only anonymised transaction descriptions and amounts. Refresh tokens are stored hashed in the DB."
+> "Data in transit: HTTPS only, httpOnly cookies prevent JavaScript access. Data at rest: PostgreSQL with encrypted disk volumes in production. Application layer: every query is scoped by userId — no cross-user data access is architecturally possible. UPI reference IDs are stripped from merchant names before anything is sent to Gemini — so the AI sees 'Zomato', not raw transaction identifiers. No user email, name, or password is ever included in a Gemini prompt. Refresh tokens are stored hashed in the DB."
 
 **"Your project stores transaction descriptions in a third-party embedding service — isn't that a privacy concern?"**
 
-> "Yes, and it's a deliberate trade-off I'd improve in production. Currently Gemini receives transaction description text. The mitigations are: descriptions are not linked to user identity in the API call, and Google's terms cover standard API usage. A stronger solution would be a locally-hosted embedding model (e.g., a quantised sentence-transformer) so no financial text leaves the infrastructure. That's on my roadmap."
+> "Yes, and it's a deliberate trade-off I'd improve in production. What Gemini receives is sanitised financial records — merchant brand names, amounts, categories, dates. Raw UPI reference IDs (e.g. `UPIAR/013914520250/DR/`) are stripped from merchant strings before any data is sent to the API, so Gemini sees 'Zomato' not the full UPI identifier. No user identity (email, name, address) is included in any prompt. A stronger solution would be a locally-hosted embedding model (e.g., a quantised sentence-transformer) so no financial text leaves the infrastructure at all. That's on my roadmap."
 
 ---
 
@@ -393,6 +397,8 @@ Explain the full cookie flow: signup ? tokens set as httpOnly cookies ? every AP
 | JSON summaryJson in Insight table | Flexible schema for weekly data | No SQL filtering on summary internals | Weekly summaries are read-only blobs |
 | MCP server as separate process | Reuses API endpoints, no code duplication | Extra process to manage | Clean separation — MCP server is just an API client |
 | Global exception filter | Consistent error shape, no stack traces in prod | Slightly less granular per-route control | One place to change error format for the whole API |
+| pdf-parse for PDF import | Digital PDFs supported with no external service | Scanned/image PDFs not supported | Covers all major Indian bank net banking exports; OCR is out-of-scope for now |
+| UPI ID sanitisation before Gemini | Reduced PII in prompts | Slightly more processing per transaction | Stripping reference numbers is cheap; keeps brand names that AI needs |
 
 ---
 
@@ -407,7 +413,9 @@ Explain the full cookie flow: signup ? tokens set as httpOnly cookies ? every AP
 | SameSite=Lax | Blocks cross-site POST requests from including the cookie — mitigates CSRF |
 | Refresh token rotation | Old token deleted on every use — stolen tokens invalidated after one legitimate refresh |
 | Gemini `gemini-embedding-2` | 768-dim matryoshka embedding model — native 3072-dim truncated to 768 via `outputDimensionality`; works with the existing pgvector schema |
-| Subscription confidence | stddev-based score measuring how closely a merchant's charge intervals match a known billing cycle |
+| `pdf-parse` PDF extraction | Line-by-line regex walk of extracted text; date-prefixed lines parsed as transactions; CR/DR marker for type |
+| UPI sanitizeMerchant | Regex strips `UPIAR/digits/XX/` prefix; keeps human brand name; applied to every Gemini prompt |
+| Tutorial page | `/tutorial` — 4-step onboarding with per-bank download guides (HDFC, ICICI, SBI, Axis, Kotak), budget setup, AI chat examples |
 | ISO week grouping | Monday-anchored week boundaries — ensures consistent weekly spend summaries |
 | Turborepo | Monorepo build system — runs api and web concurrently with shared TypeScript types |
 | MCP server | Node.js process exposing SpendWise as 6 typed tools Claude Desktop can call natively via MCP protocol |

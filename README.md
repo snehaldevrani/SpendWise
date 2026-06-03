@@ -16,7 +16,7 @@ Upload your bank statement once. SpendWise automatically categorises every trans
 
 | Feature | Details |
 |---------|---------|
-| **Multi-bank CSV import** | HDFC, ICICI, SBI, Axis Bank — automatic column alias normalisation, magic-byte validation, deduplication |
+| **Multi-bank statement import** | HDFC, ICICI, SBI, Axis Bank, Kotak — CSV, XLSX, and PDF formats; automatic column alias normalisation, magic-byte validation, deduplication |
 | **Smart categorisation** | 9 categories (Food, Travel, Utilities, Entertainment, Health, Shopping, Subscriptions, Income, Other) — keyword-based auto-classify, inline editing |
 | **Subscription leak detection** | Confidence-scored recurring charge detection across 6 billing cycles (7/14/30/90/180/365 days); flags unused subscriptions with annual cost |
 | **Monthly budgets** | Set per-category spending limits; live progress bars, prorated month-end forecast, health score |
@@ -91,7 +91,7 @@ SpendWise/
 │   │   │   │   ├── auth/           JWT auth, httpOnly cookies, refresh rotation
 │   │   │   │   ├── users/          Profile + notification preferences (GET/PATCH)
 │   │   │   │   ├── transactions/   CRUD, filters, category edit, overview stats
-│   │   │   │   ├── uploads/        CSV/XLSX parsing, magic-byte validation
+│   │   │   │   ├── uploads/        CSV/XLSX/PDF parsing, magic-byte validation
 │   │   │   │   ├── subscriptions/  Recurring charge detection + dismiss/confirm
 │   │   │   │   ├── budgets/        Monthly budget CRUD, forecast, health score
 │   │   │   │   ├── insights/       ISO-week summaries, category trends
@@ -224,14 +224,17 @@ Go to `/signup`, enter your email and a password.
 
 ### 2. Export your bank statement
 
-SpendWise supports **HDFC, ICICI, SBI, and Axis Bank** CSV/XLSX formats.
+SpendWise supports **HDFC, ICICI, SBI, Axis Bank, and Kotak** statement exports in **CSV, Excel (XLSX/XLS), and PDF** formats.
 
 | Bank | Export path |
 |------|------------|
-| HDFC | Net Banking → Accounts → Download Statement → CSV |
-| ICICI | Net Banking → Statements → Download → Excel/CSV |
-| SBI | YONO / Net Banking → e-Statements → Date range → Download CSV |
-| Axis | Net Banking → Accounts → Account Statement → CSV Download |
+| HDFC | Net Banking → Accounts → Download Statement → CSV or PDF |
+| ICICI | Net Banking → Statements → Download → Excel/CSV or PDF |
+| SBI | YONO / Net Banking → e-Statements → Date range → Download CSV or PDF |
+| Axis | Net Banking → Accounts → Account Statement → CSV or PDF Download |
+| Kotak | Net Banking → Accounts → Statements → Download → Excel or PDF |
+
+> **PDF note:** Only digital (text-based) PDFs are supported — the kind you download from net banking. Scanned / image PDFs will not parse.
 
 The file must include at minimum: a **date column**, a **description/narration column**, and **debit/credit amount columns**. Column names are normalised automatically.
 
@@ -244,6 +247,8 @@ Click **Upload Statement** from the sidebar or dashboard. After upload, three ba
 3. **Compute insights** — weekly summaries are calculated
 
 Processing typically completes in under 30 seconds.
+
+> **PDF uploads:** `pdf-parse` extracts text from digital PDFs. Each line beginning with a date pattern is treated as a transaction row. Works with all major Indian bank digital statements.
 
 ### 4. Dashboard
 
@@ -310,7 +315,8 @@ Toggle email notifications:
 - Refresh tokens **hashed in the database** — a leaked DB row cannot be replayed
 - **Atomic refresh token rotation** — old token deleted and new token inserted in a single Prisma transaction
 - **Helmet** with a strict Content Security Policy (`script-src 'self'`, no inline scripts)
-- **File upload magic-byte validation** — XLSX/XLS files are rejected if content doesn't match expected binary signatures
+- **File upload magic-byte validation** — XLSX/XLS/PDF files are rejected if content doesn't match expected binary signatures
+- **UPI reference ID sanitisation** — raw UPI transaction IDs (e.g. `UPIAR/013914520250/DR/`) are stripped from merchant names before any data is sent to the Gemini API, reducing financial PII exposure
 - **Per-user AI rate limits** — Redis counters with 24h TTL
 
 ---
@@ -318,7 +324,7 @@ Toggle email notifications:
 ## Background Job Pipeline
 
 ```
-CSV upload
+CSV / XLSX / PDF upload
     │
     ├─► JOB_EMBED_TRANSACTIONS
     │       Generate Gemini gemini-embedding-2 embeddings (768-dim) → upsert into pgvector
