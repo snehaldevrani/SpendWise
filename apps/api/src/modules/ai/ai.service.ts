@@ -10,6 +10,19 @@ const CHAT_RATE_LIMIT = 20;               // messages per day
 const RECS_RATE_LIMIT = 4;               // recommendations per day
 const RATE_WINDOW = 24 * 60 * 60;        // 24 hours
 
+/**
+ * Strip raw UPI reference IDs from merchant names before sending to Gemini.
+ * e.g. "UPIAR/013914520250/DR/Zomato/UTIB" → "Zomato"
+ * Brand names like "Amazon", "Zomato" pass through unchanged.
+ */
+function sanitizeMerchant(name: string): string {
+  // UPI pattern: UPIAR/digits/XX/Name/Bank — extract the Name segment
+  const upiMatch = name.match(/^UPIA[BR]?\/\d+\/[A-Z]{2}\/([^/]+)/i);
+  if (upiMatch) return upiMatch[1].trim();
+  // Strip leading reference codes like "NEFT/CMS/IMPS" prefixes
+  return name.replace(/^(NEFT|RTGS|IMPS|NACH|ACH|INT)[\s\/\-][\w\/\-]+\s*/i, '').trim() || name;
+}
+
 @Injectable()
 export class AiService {
   private genAI: GoogleGenerativeAI;
@@ -118,13 +131,13 @@ Return ONLY the JSON object, no explanation.`;
         .join(', ');
 
       const txnLines = allTxns
-        .map((t) => `  ${new Date(t.date).toISOString().slice(0, 10)}: ${t.merchant} (${t.category}) ₹${Number(t.amount).toFixed(2)} [${t.type}]`)
+        .map((t) => `  ${new Date(t.date).toISOString().slice(0, 10)}: ${sanitizeMerchant(t.merchant)} (${t.category}) ₹${Number(t.amount).toFixed(2)} [${t.type}]`)
         .join('\n');
 
       structuredContext = `COMPLETE TRANSACTION LIST (all ${allTxns.length} transactions, sorted by amount desc):
 Summary: ₹${totalDebit.toFixed(2)} total debits (${debits.length} txns), ₹${totalCredit.toFixed(2)} total credits (${credits.length} txns)
 By category (debits): ${categorySummary}
-Largest single debit: ${debits[0] ? `${debits[0].merchant} ₹${Number(debits[0].amount).toFixed(2)} on ${new Date(debits[0].date).toISOString().slice(0, 10)}` : 'none'}
+Largest single debit: ${debits[0] ? `${sanitizeMerchant(debits[0].merchant)} ₹${Number(debits[0].amount).toFixed(2)} on ${new Date(debits[0].date).toISOString().slice(0, 10)}` : 'none'}
 
 Transactions:
 ${txnLines}`;
@@ -168,7 +181,8 @@ Be concise and accurate. Never guess or approximate when the exact data is prese
 
     const topMerchants = recentTransactions
       .reduce<Record<string, number>>((acc, t) => {
-        acc[t.merchant] = (acc[t.merchant] ?? 0) + Number(t.amount);
+        const key = sanitizeMerchant(t.merchant);
+        acc[key] = (acc[key] ?? 0) + Number(t.amount);
         return acc;
       }, {});
 

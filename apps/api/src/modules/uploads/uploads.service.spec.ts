@@ -56,11 +56,19 @@ describe('UploadsService', () => {
   });
 
   describe('importCsv — file type validation', () => {
-    it('throws BadRequestException for unsupported file types', async () => {
-      const pdfFile = makeFile('not a csv', 'bank.pdf', 'application/pdf');
+    it('throws BadRequestException for truly unsupported file types (e.g. .json)', async () => {
+      const jsonFile = makeFile('{"key":"val"}', 'bank.json', 'application/json');
 
-      await expect(service.importCsv('u1', pdfFile)).rejects.toThrow(BadRequestException);
-      await expect(service.importCsv('u1', pdfFile)).rejects.toThrow('Supported formats');
+      await expect(service.importCsv('u1', jsonFile)).rejects.toThrow(BadRequestException);
+      await expect(service.importCsv('u1', jsonFile)).rejects.toThrow('Supported formats');
+    });
+
+    it('throws BadRequestException when PDF magic bytes are wrong (spoofed extension)', async () => {
+      const fakePdf = makeFile('not a pdf', 'bank.pdf', 'application/pdf');
+      fakePdf.buffer = Buffer.from([0x00, 0x01, 0x02, 0x03]);
+
+      await expect(service.importCsv('u1', fakePdf)).rejects.toThrow(BadRequestException);
+      await expect(service.importCsv('u1', fakePdf)).rejects.toThrow('does not match PDF format');
     });
 
     it('accepts .csv files', async () => {

@@ -17,6 +17,7 @@ const ALLOWED_MIMETYPES = new Set([
   'application/vnd.ms-excel',                                           // .xls
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',  // .xlsx
   'application/octet-stream',                                           // fallback for some browsers on .csv
+  'application/pdf',                                                    // .pdf
 ]);
 
 @ApiTags('uploads')
@@ -34,7 +35,7 @@ export class UploadsController {
         if (ALLOWED_MIMETYPES.has(file.mimetype)) {
           cb(null, true);
         } else {
-          cb(new BadRequestException(`Unsupported file type: ${file.mimetype}. Supported formats: CSV, XLS, XLSX`), false);
+          cb(new BadRequestException(`Unsupported file type: ${file.mimetype}. Supported formats: CSV, XLS, XLSX, PDF`), false);
         }
       },
     }),

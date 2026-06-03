@@ -7,7 +7,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <AuthGuard>
       <div className="flex min-h-screen bg-background">
         <Sidebar />
-        <main className="flex-1 md:ml-[240px] overflow-y-auto p-4 lg:p-8">
+        <main className="flex-1 md:ml-[240px] overflow-y-auto p-4 pt-16 md:pt-4 lg:p-8">
           {children}
         </main>
         <UploadDialog />

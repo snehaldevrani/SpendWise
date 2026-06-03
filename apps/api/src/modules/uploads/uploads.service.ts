@@ -23,8 +23,8 @@ export class UploadsService {
 
   async importCsv(userId: string, file: Express.Multer.File, password?: string): Promise<CsvImportResult> {
     const ext = file.originalname.toLowerCase();
-    if (!ext.endsWith('.csv') && !ext.endsWith('.xlsx') && !ext.endsWith('.xls')) {
-      throw new BadRequestException('Supported formats: CSV, XLS, XLSX');
+    if (!ext.endsWith('.csv') && !ext.endsWith('.xlsx') && !ext.endsWith('.xls') && !ext.endsWith('.pdf')) {
+      throw new BadRequestException('Supported formats: CSV, XLS, XLSX, PDF');
     }
 
     // Validate magic bytes to prevent disguised file attacks
@@ -94,6 +94,12 @@ export class UploadsService {
    * XLSX/XLS are ZIP or OLE2 Compound Documents.
    */
   private validateMagicBytes(buffer: Buffer, filename: string): void {
+    if (filename.endsWith('.pdf')) {
+      // PDF magic bytes: %PDF = 25 50 44 46
+      const isPdf = buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46;
+      if (!isPdf) throw new BadRequestException('File content does not match PDF format');
+    }
+
     if (filename.endsWith('.csv')) return; // plain text, no signature
 
     if (filename.endsWith('.xlsx')) {

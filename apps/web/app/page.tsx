@@ -92,13 +92,13 @@ export default function LandingPage() {
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </Link>
-            <Link href="/dashboard">
+            <Link href="/login">
               <Button
                 size="lg"
                 variant="outline"
                 className="border-white/20 text-white hover:bg-white/10"
               >
-                View Demo
+                Login
               </Button>
             </Link>
           </div>
@@ -176,16 +176,16 @@ export default function LandingPage() {
           <div className="flex items-center gap-2 text-zinc-500 text-sm">
             <TrendingUp className="h-4 w-4 text-emerald-500" />
             <span>SpendWise</span>
-            <span>© 2024</span>
+            <span>© 2026</span>
           </div>
           <a
-            href="https://github.com"
+            href="https://www.linkedin.com/in/snehaldevrani/"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-2 text-zinc-500 hover:text-white transition-colors text-sm"
           >
             <ExternalLink className="h-4 w-4" />
-            <span>View on GitHub</span>
+            <span>Take me to creator</span>
           </a>
         </div>
       </footer>

@@ -233,4 +233,86 @@ export class CsvParserService {
 
     return { rows, errors };
   }
+
+  /**
+   * Parse a digital (text-based) bank statement PDF.
+   * Works with net banking exports — NOT scanned/image PDFs.
+   * Looks for lines that begin with a date and contain decimal amounts.
+   */
+  async parsePdf(buffer: Buffer): Promise<ParseResult> {
+    let pdfText: string;
+    try {
+      // pdf-parse is a CommonJS module
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const pdfParse = require('pdf-parse') as (buf: Buffer) => Promise<{ text: string }>;
+      const data = await pdfParse(buffer);
+      pdfText = data.text;
+    } catch {
+      throw new BadRequestException(
+        'Could not read PDF file. Please ensure it is a digital (not scanned) bank statement.',
+      );
+    }
+
+    const rows: ParsedRow[] = [];
+    const errors: Array<{ row: number; message: string }> = [];
+
+    const lines = pdfText.split('\n').map((l) => l.trim()).filter(Boolean);
+    const dateRe = /^(\d{2}[\/\-]\d{2}[\/\-]\d{2,4})/;
+    let rowNum = 0;
+
+    for (const line of lines) {
+      const dateMatch = line.match(dateRe);
+      if (!dateMatch) continue;
+      rowNum++;
+
+      try {
+        const date = parseDate(dateMatch[1]);
+        const rest = line.slice(dateMatch[0].length).trim();
+
+        // Find all decimal amounts (e.g. 1,234.56 or 250.95)
+        const amountMatches = [...rest.matchAll(/(\d{1,3}(?:,\d{3})*\.\d{2})/g)];
+        if (amountMatches.length === 0) continue;
+
+        // First decimal number is the transaction amount; last is usually the running balance
+        const rawAmount = amountMatches[0][0].replace(/,/g, '');
+        const amount = parseFloat(rawAmount);
+        if (isNaN(amount) || amount <= 0) continue;
+
+        // Description = text before the first amount on this line
+        const firstAmtIdx = rest.indexOf(amountMatches[0][0]);
+        const merchant = (firstAmtIdx > 0 ? rest.slice(0, firstAmtIdx) : rest).trim() || 'Unknown';
+
+        // Determine credit vs debit from CR/DR markers
+        const upper = line.toUpperCase();
+        const type: TransactionType =
+          upper.includes(' CR') || upper.includes('CREDIT') ? 'credit' : 'debit';
+
+        const dedupKey = crypto
+          .createHash('sha256')
+          .update(`${date.toISOString()}|${merchant}|${amount}`)
+          .digest('hex');
+
+        rows.push({
+          date,
+          merchant,
+          amount,
+          currency: 'INR',
+          type,
+          rawText: line,
+          dedupKey,
+          category: categorize(merchant),
+        });
+      } catch (err) {
+        errors.push({ row: rowNum, message: (err as Error).message });
+      }
+    }
+
+    if (rows.length === 0 && errors.length === 0) {
+      throw new BadRequestException(
+        'No transactions found in PDF. Ensure it is a digital bank statement with selectable text.',
+      );
+    }
+
+    return { rows, errors };
+  }
 }

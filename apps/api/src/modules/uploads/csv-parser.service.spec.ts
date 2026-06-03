@@ -109,6 +109,34 @@ describe('CsvParserService', () => {
     });
   });
 
+  describe('BankStatementWizard / Excel format', () => {
+    it('handles Source Date column overriding serial-number Date column', () => {
+      // BankStatementWizard exports Date as Excel serial and Source Date as readable string
+      const csv = `Date,Source Date,Description,Credit,Debit,Amount,Balance
+46118.5,06-04-2026,Zomato Order,,312.8,-312.8,23.16`;
+
+      const result = service.parse(toBuffer(csv));
+      expect(result.errors).toHaveLength(0);
+      expect(result.rows).toHaveLength(1);
+      // Source Date (06-04-2026) should be used, not the serial number
+      expect(result.rows[0].date.getFullYear()).toBe(2026);
+      expect(result.rows[0].date.getMonth()).toBe(3); // April = 3
+      expect(result.rows[0].merchant).toBe('Zomato Order');
+      expect(result.rows[0].amount).toBe(312.8);
+      expect(result.rows[0].type).toBe('debit');
+    });
+
+    it('parses Excel serial number date when no Source Date column present', () => {
+      // 46118 = 2026-04-06 (Excel epoch: Jan 1 1900 = serial 1)
+      const csv = `date,merchant,amount,type
+46118,Swiggy,250,debit`;
+
+      const result = service.parse(toBuffer(csv));
+      expect(result.errors).toHaveLength(0);
+      expect(result.rows[0].date.getFullYear()).toBe(2026);
+    });
+  });
+
   describe('error handling', () => {
     it('throws BadRequestException for completely invalid file', () => {
       expect(() => service.parse(Buffer.from('not,,,\na csv\n\x00\x01'))).toThrow();

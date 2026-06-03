@@ -15,6 +15,7 @@ import {
   X,
   Upload,
   PiggyBank,
+  BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -28,6 +29,7 @@ const navItems = [
   { href: "/subscriptions", label: "Subscriptions", icon: RefreshCw },
   { href: "/budgets", label: "Budgets", icon: PiggyBank },
   { href: "/insights", label: "Insights", icon: Lightbulb },
+  { href: "/tutorial", label: "Tutorial", icon: BookOpen },
   { href: "/settings", label: "Settings", icon: Settings2 },
 ];
 
@@ -57,7 +59,7 @@ export function Sidebar() {
       <Button
         variant="ghost"
         size="icon"
-        className="fixed top-4 left-4 z-50 md:hidden"
+        className="fixed top-4 left-4 z-[100] md:hidden"
         onClick={() => setMobileOpen(!mobileOpen)}
       >
         {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}

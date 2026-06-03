@@ -144,5 +144,40 @@ describe('AiService', () => {
       expect(callArg).not.toContain('Additional semantic matches');
       expect(callArg).toContain('Any subscriptions?');
     });
+
+    it('strips UPI reference IDs from merchant names before sending to Gemini', async () => {
+      (prisma.transaction.findMany as jest.Mock).mockResolvedValue([
+        {
+          merchant: 'UPIAR/013914520250/DR/Zomato/UTIB',
+          amount: 312.8,
+          category: 'food',
+          date: new Date('2026-04-06'),
+          type: 'debit',
+        },
+        {
+          merchant: 'UPIAB/609779342132/CR/Himanshi/SBIN',
+          amount: 145,
+          category: 'income',
+          date: new Date('2026-04-07'),
+          type: 'credit',
+        },
+      ]);
+
+      mockGenerateContent.mockResolvedValue({
+        response: { text: () => 'Your top expense is food.' },
+      });
+
+      await service.chat('user-1', 'What did I spend on food?', []);
+
+      const callArg: string = mockGenerateContent.mock.calls[0][0];
+      // Brand names should be present
+      expect(callArg).toContain('Zomato');
+      expect(callArg).toContain('Himanshi');
+      // Raw UPI reference IDs must NOT be sent to Gemini
+      expect(callArg).not.toContain('013914520250');
+      expect(callArg).not.toContain('609779342132');
+      expect(callArg).not.toContain('UPIAR/');
+      expect(callArg).not.toContain('UPIAB/');
+    });
   });
 });
