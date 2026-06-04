@@ -167,15 +167,20 @@ REDIS_URL="redis://localhost:6379"
 JWT_SECRET="<min 32 chars>"
 JWT_REFRESH_SECRET="<min 32 chars>"
 GEMINI_API_KEY="AIzaSy..."          # from aistudio.google.com/apikey — starts with AIzaSy
-RESEND_API_KEY="re_..."             # optional — app works without it
-RESEND_FROM_EMAIL="alerts@yourdomain.com"
+RESEND_API_KEY="re_..."             # from resend.com — required for password reset emails
+RESEND_FROM_EMAIL="onboarding@resend.dev"  # Resend's built-in test address, no domain verification needed
 FRONTEND_URL="http://localhost:3000"
 PORT=3001
+# Google OAuth — required for "Continue with Google" on login/signup
+GOOGLE_CLIENT_ID="<OAuth 2.0 Client ID from console.cloud.google.com>"
+GOOGLE_CLIENT_SECRET="<OAuth 2.0 Client Secret>"
+GOOGLE_CALLBACK_URL="http://localhost:3001/api/auth/google/callback"
 ```
 
 API keys:
-- **Google Gemini** — [aistudio.google.com/apikey](https://aistudio.google.com/apikey) (free tier)
-- **Resend** — [resend.com](https://resend.com) (optional, for email alerts)
+- **Google Gemini** — [aistudio.google.com/apikey](https://aistudio.google.com/apikey) (free tier, no credit card)
+- **Resend** — [resend.com](https://resend.com) (free tier, 3,000 emails/month — needed for password reset emails; use `onboarding@resend.dev` as `RESEND_FROM_EMAIL` for zero-config sending)
+- **Google OAuth** — [console.cloud.google.com](https://console.cloud.google.com) → APIs & Services → Credentials → OAuth 2.0 Client ID (Web application); add `http://localhost:3001/api/auth/google/callback` as authorised redirect URI
 
 ### 3. Set up the database
 
@@ -431,12 +436,15 @@ JWT_EXPIRES_IN=15m
 JWT_REFRESH_SECRET=<32+ char random string>
 JWT_REFRESH_EXPIRES_IN=7d
 GEMINI_API_KEY=<from aistudio.google.com/apikey — starts with AIzaSy>
+RESEND_API_KEY=re_...
+RESEND_FROM_EMAIL=onboarding@resend.dev
+GOOGLE_CLIENT_ID=<OAuth 2.0 Client ID from console.cloud.google.com>
+GOOGLE_CLIENT_SECRET=<OAuth 2.0 Client Secret>
+GOOGLE_CALLBACK_URL=https://<your-render-api-url>/api/auth/google/callback
 NODE_ENV=production
 PORT=3001
 FRONTEND_URL=https://<your-vercel-url>.vercel.app
 ```
-
-`RESEND_API_KEY` and `RESEND_FROM_EMAIL` are optional — the app starts and runs fully without them (email alerts are silently skipped).
 
 ### Vercel environment variable
 
@@ -448,18 +456,20 @@ NEXT_PUBLIC_API_URL=https://<your-render-api-url>/api
 
 1. **Neon** — create project → copy `DATABASE_URL` (pgvector is pre-installed)
 2. **Upstash** — create Redis database → copy `REDIS_URL`
-3. **Render API** — new Web Service → Docker → Dockerfile path `./apps/api/Dockerfile` → set all env vars → deploy → copy service URL
-4. **Vercel** — import repo → root directory `apps/web` → set `NEXT_PUBLIC_API_URL` → deploy → copy Vercel URL → update `FRONTEND_URL` on Render
+3. **Resend** — sign up at [resend.com](https://resend.com) → copy API key; set `RESEND_FROM_EMAIL=onboarding@resend.dev` (Resend's built-in test sender — works on free tier with no domain verification)
+4. **Google OAuth** — [console.cloud.google.com](https://console.cloud.google.com) → create project → APIs & Services → OAuth consent screen (External) → Credentials → OAuth 2.0 Client ID (Web application) → add Render callback URL as authorised redirect URI and Vercel URL as authorised JavaScript origin; copy Client ID + Secret
+5. **Render API** — new Web Service → Docker → Dockerfile path `./apps/api/Dockerfile` → set all env vars (including `RESEND_*` and `GOOGLE_*`) → deploy → copy service URL
+6. **Vercel** — import repo → root directory `apps/web` → set `NEXT_PUBLIC_API_URL=https://<render-url>/api` → deploy → copy Vercel URL → update `FRONTEND_URL` on Render; also add the Vercel URL as an authorised JavaScript origin in Google Console
 
 The API container runs `prisma migrate deploy` automatically on every startup, so the Neon schema is always in sync with the code.
 
 ---
 
-7 test suites · 90 tests · 100% pass rate
+7 test suites · 94 tests · 100% pass rate
 
 | Suite | Coverage |
 |-------|---------|
-| `auth.service.spec.ts` | Signup, login, token rotation, bcrypt, duplicate email |
+| `auth.service.spec.ts` | Signup, login, token rotation, bcrypt, duplicate email, forgot/reset password, Google OAuth validate |
 | `csv-parser.service.spec.ts` | All Indian bank date formats, split debit/credit columns, amount parsing, deduplication, error handling |
 | `subscription-detector.service.spec.ts` | Weekly/monthly/annual detection, confidence scoring, edge cases |
 | `insights.service.spec.ts` | ISO week grouping, category aggregation, credit exclusion, merchant ranking |

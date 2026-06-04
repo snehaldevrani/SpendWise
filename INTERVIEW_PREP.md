@@ -406,7 +406,8 @@ This section is critical for a fintech project — interviewers will probe it di
 | Transactions (merchant, amount, category, date) | Neon PostgreSQL | Plain rows — Neon encrypts the volume at rest (AES-256) |
 | Transaction embeddings | Neon PostgreSQL (pgvector column) | Same volume encryption |
 | JWT access tokens | httpOnly SameSite=Lax cookie | Not accessible to JavaScript; cannot be stolen via XSS |
-| Sessions / rate limit counters | Upstash Redis | **Redis-backed** so counters survive server restarts |
+| Sessions / rate limit counters | Upstash Redis | **Redis-backed** (`@nest-lab/throttler-storage-redis`) so counters survive Render cold starts — a previous in-memory gap is now closed |
+| Password reset tokens | Neon PostgreSQL | `crypto.randomBytes(32)` token bcrypt-hashed before storage; 1-hour expiry; single-use (`usedAt` marked); all sessions revoked atomically on reset |
 
 **In transit:**
 - All API traffic over HTTPS — Render terminates TLS
@@ -432,11 +433,6 @@ Sanitised merchant names (UPI reference IDs stripped), amounts, categories, and 
 - No column-level encryption on the `transactions` table — Neon's volume encryption covers the data at rest; column-level encryption would require application-layer decryption on every query, adding latency and complexity not justified at this scale
 - No data residency controls — Neon and Render run in US regions; relevant if building for EU users (GDPR)
 - Scanned/image PDF support — digital PDFs (net banking downloads) are handled; OCR for scanned PDFs is out of scope for now
-
-**Additional security features now shipped:**
-- **Password reset flow** — `POST /auth/forgot-password` generates a `crypto.randomBytes(32)` token, bcrypt-hashes it, stores with 1-hour expiry. `POST /auth/reset-password` verifies the raw token against all non-expired candidates, marks it used (single-use), resets the password, and revokes all active sessions atomically.
-- **Google OAuth** — `passport-google-oauth20` validates the Google profile; `validateGoogleUser()` finds by `googleId`, links by email, or creates new user. `passwordHash` is nullable so OAuth-only accounts are supported.
-- **Redis-backed rate limiting** — `@nest-lab/throttler-storage-redis` stores counters in Upstash Redis. Counters persist across Render cold starts — a previous in-memory gap is now closed.
 
 ---
 
@@ -621,7 +617,11 @@ Explain the full cookie flow: signup → tokens set as httpOnly cookies → ever
 | `NODE_ENV` | `production` | NestJS and Express change behaviour in production: detailed error messages are hidden from responses, cookie flags change to `SameSite=None; Secure` for cross-origin support. |
 | `PORT` | `3001` | The port NestJS listens on inside the container. Render routes external HTTPS traffic to this port. |
 | `FRONTEND_URL` | `https://spendwise-web-nine.vercel.app` | Used in CORS config (`app.enableCors({ origin: FRONTEND_URL })`). Without this, the browser blocks all API responses — cross-origin requests from Vercel to Render are rejected. |
-| `RESEND_API_KEY` | `re_...` | Optional. Used only for sending email alerts and weekly digests. If absent, the app starts normally and email features are silently skipped. |
+| `RESEND_API_KEY` | `re_...` | Resend free tier (3,000 emails/month). Required for password reset emails, weekly digest, and subscription alerts. Get it at [resend.com](https://resend.com) — no domain verification needed on the free tier. If absent, the app starts normally but password reset will not deliver emails. |
+| `RESEND_FROM_EMAIL` | `onboarding@resend.dev` | Sender address shown in outgoing emails. `onboarding@resend.dev` is Resend's built-in test address — works immediately on the free tier with zero DNS configuration. For production you'd use a verified custom domain (e.g. `noreply@yourapp.com`). |
+| `GOOGLE_CLIENT_ID` | `...apps.googleusercontent.com` | OAuth 2.0 Client ID from Google Cloud Console. Needed for "Continue with Google" on login/signup. Create at: Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client ID (type: Web application). |
+| `GOOGLE_CLIENT_SECRET` | `GOCSPX-...` | OAuth 2.0 Client Secret. Never commit to the repository — always set via Render env var. |
+| `GOOGLE_CALLBACK_URL` | `https://<render-url>/api/auth/google/callback` | Must exactly match the authorised redirect URI registered in Google Cloud Console. The `/api` prefix matters — Render routes to NestJS which strips the prefix via `setGlobalPrefix('api')`. Also register the Vercel frontend URL as an authorised JavaScript origin in Google Console so the OAuth consent screen loads correctly. |
 
 **Q: How do you get the `GEMINI_API_KEY`?**
 
