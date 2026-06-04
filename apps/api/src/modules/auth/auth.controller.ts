@@ -93,7 +93,7 @@ export class AuthController {
 
   @Public()
   @Get('google')
-  @UseGuards(AuthGuard('google'))
+  @UseGuards(AuthGuard('google', { prompt: 'select_account' }))
   googleAuth() {
     // Passport redirects to Google — no body needed
   }
