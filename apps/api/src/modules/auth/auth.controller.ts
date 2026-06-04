@@ -13,6 +13,11 @@ import { ChangePasswordDto } from './dto/change-password.dto';
 import { Public } from './decorators/public.decorator';
 import { CurrentUser } from './decorators/current-user.decorator';
 
+// Forces Google account picker on every OAuth initiation
+class GoogleAuthGuard extends AuthGuard('google') {
+  getAuthenticateOptions() { return { prompt: 'select_account' }; }
+}
+
 // Strict limit for auth endpoints: 5 requests per 15 minutes
 const AUTH_THROTTLE = { default: { limit: 5, ttl: 900_000 } };
 
@@ -93,7 +98,7 @@ export class AuthController {
 
   @Public()
   @Get('google')
-  @UseGuards(AuthGuard('google', { prompt: 'select_account' }))
+  @UseGuards(GoogleAuthGuard)
   googleAuth() {
     // Passport redirects to Google — no body needed
   }
