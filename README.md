@@ -29,6 +29,9 @@ Upload your bank statement once. SpendWise automatically categorises every trans
 | **Weekly email digest** | Every Monday: last week's spend, income, net savings, top categories and merchants — opt-in via Settings |
 | **Email alerts** | New subscription leak detected → immediate notification |
 | **Secure auth** | httpOnly SameSite=Lax cookies, bcrypt refresh tokens, silent 401 rotation, per-user AI rate limits |
+| **Google OAuth** | "Continue with Google" on login/signup — account auto-linked by email if a password account already exists |
+| **Password reset** | Forgot password → Resend email with single-use 1-hour token; Change password in Settings |
+| **Privacy policy** | `/privacy` page — full breakdown of what data is stored, what leaves the server, and how to delete your account |
 
 ---
 
@@ -322,6 +325,10 @@ Toggle email notifications:
 - **File upload magic-byte validation** — XLSX/XLS/PDF files are rejected if content doesn't match expected binary signatures
 - **UPI reference ID sanitisation** — raw UPI transaction IDs (e.g. `UPIAR/013914520250/DR/`) are stripped from merchant names before any data is sent to the Gemini API, reducing financial PII exposure
 - **Per-user AI rate limits** — Redis counters with 24h TTL
+- **Redis-backed rate limiting** — `@nest-lab/throttler-storage-redis` ensures rate limit counters survive server restarts; auth endpoints throttled to 5/15 min, uploads to 10/hour, password reset to 3/hour
+- **Password reset via email** — single-use bcrypt-hashed token, 1-hour expiry; all sessions revoked on reset
+- **Google OAuth** — `passport-google-oauth20`; accounts linked by email if password account already exists; `passwordHash` nullable so OAuth-only accounts are fully supported
+- **Privacy policy page** at `/privacy` — documents all data flows including what Gemini receives
 
 ---
 
@@ -382,6 +389,11 @@ Key endpoints:
 | `POST` | `/api/ai/chat` | RAG-augmented AI chat (accepts `history[]` for multi-turn) |
 | `GET` | `/api/users/preferences` | Notification settings |
 | `PATCH` | `/api/users/preferences` | Update notification settings |
+| `POST` | `/api/auth/forgot-password` | Send password reset email (public, 3/hour) |
+| `POST` | `/api/auth/reset-password` | Reset password with token (public, 5/hour) |
+| `POST` | `/api/auth/change-password` | Change password (authenticated) |
+| `GET` | `/api/auth/google` | Initiate Google OAuth redirect |
+| `GET` | `/api/auth/google/callback` | Google OAuth callback — sets cookies, redirects to `/dashboard` |
 | `GET` | `/health` | Health check |
 
 ---

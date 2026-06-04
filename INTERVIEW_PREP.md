@@ -402,10 +402,11 @@ This section is critical for a fintech project — interviewers will probe it di
 |------|---------|-----------|
 | Passwords | Neon PostgreSQL | `bcrypt` hashed, cost factor 12 — plaintext never stored |
 | Refresh tokens | Neon PostgreSQL | `bcrypt` hashed before insert — a leaked DB row cannot be replayed |
+| Password reset tokens | Neon PostgreSQL | `bcrypt` hashed, 1-hour expiry, single-use (usedAt marked) |
 | Transactions (merchant, amount, category, date) | Neon PostgreSQL | Plain rows — Neon encrypts the volume at rest (AES-256) |
 | Transaction embeddings | Neon PostgreSQL (pgvector column) | Same volume encryption |
 | JWT access tokens | httpOnly SameSite=Lax cookie | Not accessible to JavaScript; cannot be stolen via XSS |
-| Sessions / rate limit counters | Upstash Redis | In-memory, no PII |
+| Sessions / rate limit counters | Upstash Redis | **Redis-backed** so counters survive server restarts |
 
 **In transit:**
 - All API traffic over HTTPS — Render terminates TLS
@@ -432,6 +433,11 @@ Sanitised merchant names (UPI reference IDs stripped), amounts, categories, and 
 - No data residency controls — Neon and Render run in US regions; relevant if building for EU users (GDPR)
 - Scanned/image PDF support — digital PDFs (net banking downloads) are handled; OCR for scanned PDFs is out of scope for now
 
+**Additional security features now shipped:**
+- **Password reset flow** — `POST /auth/forgot-password` generates a `crypto.randomBytes(32)` token, bcrypt-hashes it, stores with 1-hour expiry. `POST /auth/reset-password` verifies the raw token against all non-expired candidates, marks it used (single-use), resets the password, and revokes all active sessions atomically.
+- **Google OAuth** — `passport-google-oauth20` validates the Google profile; `validateGoogleUser()` finds by `googleId`, links by email, or creates new user. `passwordHash` is nullable so OAuth-only accounts are supported.
+- **Redis-backed rate limiting** — `@nest-lab/throttler-storage-redis` stores counters in Upstash Redis. Counters persist across Render cold starts — a previous in-memory gap is now closed.
+
 ---
 
 ## Part 4: Questions They Will Ask
@@ -442,11 +448,15 @@ Sanitised merchant names (UPI reference IDs stripped), amounts, categories, and 
 
 **"How does your auth work?"**
 
-Explain the full cookie flow: signup ? tokens set as httpOnly cookies ? every API call browser sends cookie automatically ? JWT Strategy reads from cookie ? 401 ? Axios interceptor calls /refresh ? new cookies set ? retry original request. Mention refresh token rotation and why it matters.
+Explain the full cookie flow: signup → tokens set as httpOnly cookies → every API call browser sends cookie automatically → JWT Strategy reads from cookie → 401 → Axios interceptor calls /refresh → new cookies set → retry original request. Mention refresh token rotation and why it matters. Also mention Google OAuth: clicking "Continue with Google" does a full-page redirect to `GET /auth/google` → Passport handles the Google consent → callback at `GET /auth/google/callback` sets httpOnly cookies and redirects to `/dashboard`.
+
+**"How does your password reset work?"**
+
+> "`crypto.randomBytes(32)` generates a secure random token. We bcrypt-hash it before storing in the DB (so a DB dump can't be used to generate valid reset links). The raw token is sent to the user's email as a URL query param. On reset, we scan all non-expired unused tokens, bcrypt-compare each one, find the match, mark it used, update the password hash, and delete all refresh tokens for that user in a single `$transaction` call. This means password reset also invalidates all existing sessions — if an attacker forced a reset, the legitimate user's sessions are gone but so is the attacker's. The token expires in 1 hour and can only be used once."
 
 **"What would you add if you had more time?"**
 
-> "Two things. First, hybrid search — combine pgvector cosine similarity with full-text search on merchant names so users can search by exact merchant name alongside semantic queries. Second, scanned PDF support via an OCR pipeline (e.g. Tesseract) — digital PDFs are already supported using pdf-parse, but image-based PDFs from older bank branches still require OCR. The SSE import progress, recurring budgets, and dashboard date range are already shipped."
+> "Two things. First, hybrid search — combine pgvector cosine similarity with full-text search on merchant names so users can search by exact merchant name alongside semantic queries. Second, scanned PDF support via an OCR pipeline (e.g. Tesseract) — digital PDFs are already supported using pdf-parse, but image-based PDFs from older bank branches still require OCR. The SSE import progress, recurring budgets, dashboard date range, Google OAuth, password reset, Redis-backed rate limiting, and privacy policy are all shipped."
 
 **"How do you handle sensitive financial data?"**
 
@@ -465,6 +475,7 @@ Explain the full cookie flow: signup ? tokens set as httpOnly cookies ? every AP
 | httpOnly cookies over localStorage | XSS safety | Slightly more complex refresh flow | Worth it — token theft is a real attack |
 | BullMQ over sync processing | Resilience, non-blocking uploads | Added complexity (Redis dependency) | Users shouldn't wait 8 seconds for embeddings |
 | SSE over WebSockets for progress | Server-push, simpler, NestJS `@Sse` native, no handshake | Bidirectional communication not possible | One-way status stream is all that's needed |
+| Google OAuth over email-only | One-click login, no password to manage for OAuth users | `passwordHash` must be nullable; account linking logic needed | Email-based account linking is safe and standard |
 | pgvector over Pinecone | Single service, SQL joins | Scale ceiling (~10M vectors) | More than enough for this use case |
 | Gemini over Claude + Voyage | Free tier, single API key | Claude's more reliable structured output | Gemini 2.5 Flash handles JSON output well enough; cost wins |
 | gemini-embedding-2 with outputDimensionality | 768-dim, compatible with existing schema | Native 3072-dim would be higher quality | Matryoshka truncation retains quality; smaller vectors = faster search |
@@ -501,6 +512,9 @@ Explain the full cookie flow: signup ? tokens set as httpOnly cookies ? every AP
 | `takeWhile(pred, true)` | Inclusive variant — emits one final event even when the predicate turns false, so the browser sees the `done: true` completion frame |
 | Recurring budget | `month=0, year=0` sentinel in DB; service merges explicit + recurring rows per category, explicit wins |
 | `RangeOverview` | `GET /transactions/range-overview?start=&end=` — aggregates totalDebit/totalIncome/savings for any arbitrary date window |
+| Google OAuth account linking | `validateGoogleUser()` — find by googleId → else find by email and link → else create new user; `passwordHash` nullable |
+| Password reset token | `crypto.randomBytes(32)` raw token bcrypt-hashed before DB storage; 1-hour expiry; single-use (`usedAt`); all sessions revoked on reset |
+| Redis-backed throttler | `@nest-lab/throttler-storage-redis` — rate limit counters in Upstash Redis survive Render cold starts; fixes in-memory gap |
 
 ---
 
