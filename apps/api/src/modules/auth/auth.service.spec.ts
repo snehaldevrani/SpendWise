@@ -5,11 +5,13 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { AlertsService } from '../alerts/alerts.service';
 
 const mockPrisma = {
   user: {
     findUnique: jest.fn(),
     create: jest.fn(),
+    update: jest.fn(),
   },
   refreshToken: {
     create: jest.fn(),
@@ -18,6 +20,17 @@ const mockPrisma = {
     delete: jest.fn(),
     deleteMany: jest.fn(),
   },
+  passwordResetToken: {
+    create: jest.fn(),
+    findMany: jest.fn(),
+    update: jest.fn(),
+    deleteMany: jest.fn(),
+  },
+  $transaction: jest.fn(),
+};
+
+const mockAlerts = {
+  sendAlert: jest.fn().mockResolvedValue(undefined),
 };
 
 const mockJwt = {
@@ -39,6 +52,7 @@ describe('AuthService', () => {
         { provide: PrismaService, useValue: mockPrisma },
         { provide: JwtService, useValue: mockJwt },
         { provide: ConfigService, useValue: mockConfig },
+        { provide: AlertsService, useValue: mockAlerts },
       ],
     }).compile();
 

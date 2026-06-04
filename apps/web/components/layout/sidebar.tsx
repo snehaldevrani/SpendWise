@@ -123,6 +123,16 @@ export function Sidebar() {
           </Button>
         </div>
 
+        {/* Privacy link */}
+        <div className="px-4 pb-1">
+          <Link
+            href="/privacy"
+            className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
+          >
+            Privacy Policy
+          </Link>
+        </div>
+
         {/* User section */}
         <div className="p-4 border-t border-white/10">
           <div className="flex items-center gap-3 px-2 py-2">

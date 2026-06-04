@@ -14,6 +14,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { Observable, interval } from 'rxjs';
 import { exhaustMap, take, takeWhile } from 'rxjs/operators';
 import { UploadsService } from './uploads.service';
@@ -38,6 +39,7 @@ export class UploadsController {
     @InjectQueue(IMPORT_QUEUE) private importQueue: Queue,
   ) {}
 
+  @Throttle({ default: { limit: 10, ttl: 3_600_000 } })
   @Post('csv')
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(

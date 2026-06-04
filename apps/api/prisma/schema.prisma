@@ -12,17 +12,19 @@ datasource db {
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
-  passwordHash String   @map("password_hash")
+  passwordHash String?  @map("password_hash")
+  googleId     String?  @unique @map("google_id")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  transactions  Transaction[]
-  subscriptions Subscription[]
-  insights      Insight[]
-  documents     Document[]
-  refreshTokens RefreshToken[]
-  preferences   UserPreferences?
-  budgets       Budget[]
+  transactions        Transaction[]
+  subscriptions       Subscription[]
+  insights            Insight[]
+  documents           Document[]
+  refreshTokens       RefreshToken[]
+  preferences         UserPreferences?
+  budgets             Budget[]
+  passwordResetTokens PasswordResetToken[]
 
   @@map("users")
 }
@@ -175,4 +177,18 @@ model Budget {
   @@unique([userId, category, month, year])
   @@index([userId, month, year])
   @@map("budgets")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  tokenHash String    @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
 }

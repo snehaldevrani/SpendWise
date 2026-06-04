@@ -39,6 +39,18 @@ class EnvironmentVariables {
   @IsString()
   RESEND_FROM_EMAIL?: string;
 
+  @IsOptional()
+  @IsString()
+  GOOGLE_CLIENT_ID?: string;
+
+  @IsOptional()
+  @IsString()
+  GOOGLE_CLIENT_SECRET?: string;
+
+  @IsOptional()
+  @IsString()
+  GOOGLE_CALLBACK_URL?: string;
+
   @IsEnum(Environment)
   NODE_ENV!: Environment;
 

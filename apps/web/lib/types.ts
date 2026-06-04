@@ -43,4 +43,5 @@ export interface CsvImportResult {
   skipped: number;
   failed: number;
   errors: Array<{ row: number; message: string }>;
+  jobIds?: string[];
 }

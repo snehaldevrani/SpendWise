@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { Trash2, AlertTriangle, User, Database } from 'lucide-react';
+import { Trash2, AlertTriangle, User, Database, Lock, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -22,6 +22,13 @@ export default function SettingsPage() {
   const [deleteDialog, setDeleteDialog] = useState(false);
   const [clearDialog, setClearDialog] = useState(false);
 
+  // Change password state
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+
   const prefsQuery = useQuery<UserPreferences>({
     queryKey: ['user-preferences'],
     queryFn: () => api.get<UserPreferences>('/users/preferences').then((r) => r.data),
@@ -31,7 +38,6 @@ export default function SettingsPage() {
     weeklyEmail: true, newSubAlert: true, spikeAlert: false, timezone: 'Asia/Kolkata',
   });
 
-  // Sync local state when server data arrives
   useEffect(() => {
     if (prefsQuery.data) setLocalPrefs(prefsQuery.data);
   }, [prefsQuery.data]);
@@ -49,6 +55,28 @@ export default function SettingsPage() {
     const next = { ...localPrefs, [key]: value };
     setLocalPrefs(next);
     updatePrefs.mutate({ [key]: value });
+  };
+
+  const changePassword = useMutation({
+    mutationFn: () => api.post('/auth/change-password', { currentPassword, newPassword }).then((r) => r.data),
+    onSuccess: () => {
+      toast.success('Password updated successfully');
+      setCurrentPassword(''); setNewPassword(''); setConfirmPassword('');
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      toast.error(msg || 'Failed to update password');
+    },
+  });
+
+  const handleChangePassword = () => {
+    if (!currentPassword || !newPassword || !confirmPassword) return toast.error('Please fill in all fields');
+    if (newPassword !== confirmPassword) return toast.error('New passwords do not match');
+    if (newPassword.length < 8) return toast.error('Password must be at least 8 characters');
+    if (!/[A-Z]/.test(newPassword)) return toast.error('Password must contain an uppercase letter');
+    if (!/[a-z]/.test(newPassword)) return toast.error('Password must contain a lowercase letter');
+    if (!/[0-9]/.test(newPassword)) return toast.error('Password must contain a number');
+    changePassword.mutate();
   };
 
   const deleteAccount = useMutation({
@@ -90,6 +118,65 @@ export default function SettingsPage() {
               <span className="text-xs text-[var(--color-success)] font-medium whitespace-nowrap">Verified</span>
             </div>
           </div>
+        </div>
+      </Card>
+
+      {/* Change Password */}
+      <Card className="p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Lock className="h-4 w-4 text-muted-foreground" />
+          <h2 className="text-sm font-semibold text-foreground">Change Password</h2>
+        </div>
+        <div className="space-y-4">
+          <div>
+            <Label className="text-sm font-medium mb-1.5 block">Current password</Label>
+            <div className="relative">
+              <Input
+                type={showCurrent ? 'text' : 'password'}
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                placeholder="••••••••"
+                className="h-10 pr-10"
+              />
+              <button type="button" onClick={() => setShowCurrent(!showCurrent)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                {showCurrent ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+          <div>
+            <Label className="text-sm font-medium mb-1.5 block">New password</Label>
+            <div className="relative">
+              <Input
+                type={showNew ? 'text' : 'password'}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="••••••••"
+                className="h-10 pr-10"
+              />
+              <button type="button" onClick={() => setShowNew(!showNew)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                {showNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+          <div>
+            <Label className="text-sm font-medium mb-1.5 block">Confirm new password</Label>
+            <Input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="••••••••"
+              className="h-10"
+            />
+          </div>
+          <Button
+            onClick={handleChangePassword}
+            disabled={changePassword.isPending}
+            className="bg-emerald-500 hover:bg-emerald-600 text-black font-medium"
+          >
+            {changePassword.isPending ? 'Updating...' : 'Update password'}
+          </Button>
         </div>
       </Card>
 

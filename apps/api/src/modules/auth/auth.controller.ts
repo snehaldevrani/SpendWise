@@ -1,12 +1,17 @@
-import { Controller, HttpCode, HttpStatus, Post, Body, Req, Res, UnauthorizedException } from '@nestjs/common';
+import { Controller, HttpCode, HttpStatus, Post, Get, Body, Req, Res, UnauthorizedException, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
+import { AuthGuard } from '@nestjs/passport';
 import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { AuthTokens } from '@spendwise/shared-types';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { Public } from './decorators/public.decorator';
+import { CurrentUser } from './decorators/current-user.decorator';
 
 // Strict limit for auth endpoints: 5 requests per 15 minutes
 const AUTH_THROTTLE = { default: { limit: 5, ttl: 900_000 } };
@@ -60,6 +65,48 @@ export class AuthController {
     const clearOpts = { path: '/', secure: isProd, sameSite: (isProd ? 'none' : 'lax') as 'none' | 'lax' };
     res.clearCookie('access_token', clearOpts);
     res.clearCookie('refresh_token', clearOpts);
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 3, ttl: 3_600_000 } })
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    await this.authService.forgotPassword(dto.email);
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 5, ttl: 3_600_000 } })
+  @Post('reset-password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    await this.authService.resetPassword(dto.token, dto.newPassword);
+  }
+
+  @Post('change-password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async changePassword(@CurrentUser() user: { id: string }, @Body() dto: ChangePasswordDto) {
+    await this.authService.changePassword(user.id, dto.currentPassword, dto.newPassword);
+  }
+
+  // ─── Google OAuth ──────────────────────────────────────────────────────────
+
+  @Public()
+  @Get('google')
+  @UseGuards(AuthGuard('google'))
+  googleAuth() {
+    // Passport redirects to Google — no body needed
+  }
+
+  @Public()
+  @Get('google/callback')
+  @UseGuards(AuthGuard('google'))
+  async googleCallback(@Req() req: Request, @Res() res: Response) {
+    const user = req.user as { id: string; email: string };
+    const tokens = await this.authService.issueTokensForOAuth(user.id, user.email);
+    this.setAuthCookies(res, tokens);
+    const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
+    res.redirect(`${frontendUrl}/dashboard`);
   }
 
   private setAuthCookies(res: Response, tokens: AuthTokens): void {

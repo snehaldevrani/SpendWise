@@ -178,15 +178,23 @@ export default function LandingPage() {
             <span>SpendWise</span>
             <span>© 2026</span>
           </div>
-          <a
-            href="https://www.linkedin.com/in/snehaldevrani/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 text-zinc-500 hover:text-white transition-colors text-sm"
-          >
-            <ExternalLink className="h-4 w-4" />
-            <span>Take me to creator</span>
-          </a>
+          <div className="flex items-center gap-6">
+            <Link
+              href="/privacy"
+              className="text-zinc-500 hover:text-white transition-colors text-sm"
+            >
+              Privacy Policy
+            </Link>
+            <a
+              href="https://www.linkedin.com/in/snehaldevrani/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 text-zinc-500 hover:text-white transition-colors text-sm"
+            >
+              <ExternalLink className="h-4 w-4" />
+              <span>Take me to creator</span>
+            </a>
+          </div>
         </div>
       </footer>
     </div>
