@@ -29,7 +29,7 @@ Upload your bank statement once. SpendWise automatically categorises every trans
 | **Weekly email digest** | Every Monday: last week's spend, income, net savings, top categories and merchants — opt-in via Settings |
 | **Email alerts** | New subscription leak detected → immediate notification |
 | **Secure auth** | httpOnly SameSite=Lax cookies, bcrypt refresh tokens, silent 401 rotation, per-user AI rate limits |
-| **Google OAuth** | "Continue with Google" on login/signup — account auto-linked by email if a password account already exists |
+| **Google OAuth** | "Continue with Google" on login/signup — account auto-linked by email if a password account already exists; `prompt: 'select_account'` forces the Google account picker on every sign-in so users can always switch accounts |
 | **Password reset** | Forgot password → Resend email with single-use 1-hour token; Change password in Settings |
 | **Privacy policy** | `/privacy` page — full breakdown of what data is stored, what leaves the server, and how to delete your account |
 
@@ -332,7 +332,7 @@ Toggle email notifications:
 - **Per-user AI rate limits** — Redis counters with 24h TTL
 - **Redis-backed rate limiting** — `@nest-lab/throttler-storage-redis` ensures rate limit counters survive server restarts; auth endpoints throttled to 5/15 min, uploads to 10/hour, password reset to 3/hour
 - **Password reset via email** — single-use bcrypt-hashed token, 1-hour expiry; all sessions revoked on reset
-- **Google OAuth** — `passport-google-oauth20`; accounts linked by email if password account already exists; `passwordHash` nullable so OAuth-only accounts are fully supported
+- **Google OAuth** — `passport-google-oauth20`; `prompt: 'select_account'` forces account picker on every sign-in; after Google's callback the API redirects to `/callback` (not directly to `/dashboard`) so the Next.js client can call `/users/me`, populate the Zustand auth store, and then navigate to `/dashboard`; `AuthGuard` also calls `/users/me` as a fallback when Zustand is empty (handles page refreshes with a valid cookie)
 - **Privacy policy page** at `/privacy` — documents all data flows including what Gemini receives
 
 ---
@@ -398,7 +398,7 @@ Key endpoints:
 | `POST` | `/api/auth/reset-password` | Reset password with token (public, 5/hour) |
 | `POST` | `/api/auth/change-password` | Change password (authenticated) |
 | `GET` | `/api/auth/google` | Initiate Google OAuth redirect |
-| `GET` | `/api/auth/google/callback` | Google OAuth callback — sets cookies, redirects to `/dashboard` |
+| `GET` | `/api/auth/google/callback` | Google OAuth callback — sets httpOnly cookies, redirects to `/callback` (frontend hydration page) |
 | `GET` | `/health` | Health check |
 
 ---
