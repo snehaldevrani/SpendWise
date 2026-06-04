@@ -106,11 +106,11 @@ export class AuthController {
     const tokens = await this.authService.issueTokensForOAuth(user.id, user.email);
     this.setAuthCookies(res, tokens);
     const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
-    // Redirect to /auth/callback so the Next.js page can call /users/me,
+    // Redirect to /callback so the Next.js page can call /users/me,
     // populate the Zustand store, and then navigate to /dashboard.
     // Redirecting directly to /dashboard would leave Zustand empty (the
     // store is client-side) and AuthGuard would bounce the user to /login.
-    res.redirect(`${frontendUrl}/auth/callback`);
+    res.redirect(`${frontendUrl}/callback`);
   }
 
   private setAuthCookies(res: Response, tokens: AuthTokens): void {
