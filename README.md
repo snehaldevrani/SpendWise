@@ -16,7 +16,7 @@ Upload your bank statement once. SpendWise automatically categorises every trans
 
 | Feature | Details |
 |---------|---------|
-| **Multi-bank statement import** | HDFC, ICICI, SBI, Axis Bank, Kotak — CSV, XLSX, and PDF formats; automatic column alias normalisation, magic-byte validation, deduplication |
+| **Multi-bank statement import** | HDFC, ICICI, SBI, Axis Bank, Kotak — CSV, XLSX (.xlsx only), and PDF formats; automatic column alias normalisation, magic-byte validation, deduplication |
 | **Real-time import progress** | After upload, an SSE stream (`GET /uploads/progress`) polls BullMQ job states every 1.5 s; upload dialog shows three live step indicators (embed → subscriptions → insights) updating in real time |
 | **Smart categorisation** | 9 categories (Food, Travel, Utilities, Entertainment, Health, Shopping, Subscriptions, Income, Other) — keyword-based auto-classify, inline editing |
 | **Subscription leak detection** | Confidence-scored recurring charge detection across 6 billing cycles (7/14/30/90/180/365 days); flags unused subscriptions with annual cost |
@@ -234,7 +234,7 @@ Go to `/signup`, enter your email and a password.
 
 ### 2. Export your bank statement
 
-SpendWise supports **HDFC, ICICI, SBI, Axis Bank, and Kotak** statement exports in **CSV, Excel (XLSX/XLS), and PDF** formats.
+SpendWise supports **HDFC, ICICI, SBI, Axis Bank, and Kotak** statement exports in **CSV, Excel (XLSX), and PDF** formats.
 
 | Bank | Export path |
 |------|------------|
@@ -335,7 +335,8 @@ Toggle email notifications:
 - **Google OAuth** — `passport-google-oauth20`; `prompt: 'select_account'` forces account picker on every sign-in; after Google's callback the API redirects to `/callback` (not directly to `/dashboard`) so the Next.js client can call `/users/me`, populate the Zustand auth store, and then navigate to `/dashboard`; `AuthGuard` always calls `/users/me` on every mount — no fast-path bypass — closing the stale-session window
 - **ThrottlerGuard registered as global APP_GUARD** — all `@Throttle()` decorators are now actively enforced; auth endpoints: 5 req/15 min; uploads: 10/hour; password reset: 3/hour
 - **SSE job ownership check** — `GET /uploads/progress` verifies `job.data.userId === authenticatedUser.id`; prevents polling another user's import jobs
-- **Strict MIME type allowlist on upload** — only `text/csv`, `application/vnd.ms-excel`, `.xlsx`, and `application/pdf` accepted; `application/octet-stream` and `text/plain` removed
+- **Strict MIME type allowlist on upload** — only `text/csv`, `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` (.xlsx), and `application/pdf` accepted; `application/octet-stream`, `text/plain`, and `application/vnd.ms-excel` (.xls) removed
+- **xlsx package replaced with exceljs** — dropped abandoned `xlsx@0.18.5` (known prototype-pollution and ReDoS CVEs) in favour of actively maintained `exceljs@4.4.0`; legacy `.xls` (OLE2) format no longer accepted — only `.xlsx` (OOXML/ZIP) files are supported
 - **`@MaxLength(128)` on all password DTO fields** — caps both bcrypt and regex work on public auth endpoints; prevents ReDoS amplification attacks
 - **`@Max(9_999_999)` on budget `limitAmount`** — prevents `Infinity`/numeric overflow reaching the DB
 - **`@ArrayMaxSize(50)` + `@MaxLength(2000)` on AI chat history** — prevents token-stuffing (previously unbounded history could send megabytes per request to Gemini)
@@ -481,7 +482,7 @@ The API container runs `prisma migrate deploy` automatically on every startup, s
 
 ---
 
-7 test suites · 95 tests · 100% pass rate
+7 test suites · 94 tests · 100% pass rate
 
 | Suite | Coverage |
 |-------|---------|
