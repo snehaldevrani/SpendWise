@@ -21,8 +21,7 @@ class GoogleAuthGuard extends AuthGuard('google') {
 // Strict limit for auth endpoints: 5 requests per 15 minutes
 const AUTH_THROTTLE = { default: { limit: 5, ttl: 900_000 } };
 
-const ACCESS_TOKEN_TTL_MS = 15 * 60 * 1000;        // 15 minutes
-const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const ACCESS_TOKEN_TTL_MS = 15 * 60 * 1000; // 15 minutes
 
 @ApiTags('auth')
 @Controller('auth')
@@ -121,7 +120,8 @@ export class AuthController {
   private setAuthCookies(res: Response, tokens: AuthTokens): void {
     const isProd = process.env.NODE_ENV === 'production';
     const base = { httpOnly: true, secure: isProd, sameSite: (isProd ? 'none' : 'lax') as 'none' | 'lax', path: '/' };
+    const refreshMaxAge = Math.max(0, tokens.refreshExpiresAt.getTime() - Date.now());
     res.cookie('access_token', tokens.accessToken, { ...base, maxAge: ACCESS_TOKEN_TTL_MS });
-    res.cookie('refresh_token', tokens.refreshToken, { ...base, maxAge: REFRESH_TOKEN_TTL_MS });
+    res.cookie('refresh_token', tokens.refreshToken, { ...base, maxAge: refreshMaxAge });
   }
 }

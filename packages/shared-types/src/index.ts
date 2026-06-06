@@ -2,6 +2,7 @@
 export interface AuthTokens {
   accessToken: string;
   refreshToken: string;
+  refreshExpiresAt: Date;
 }
 
 export interface JwtPayload {

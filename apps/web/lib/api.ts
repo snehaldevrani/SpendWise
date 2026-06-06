@@ -12,7 +12,9 @@ api.interceptors.response.use(
   (r) => r,
   async (error) => {
     const original = error.config;
-    if (error.response?.status === 401 && !original._retry) {
+    const url = (original?.url as string | undefined) ?? '';
+    const isPublicAuthRoute = url.includes('/auth/login') || url.includes('/auth/signup');
+    if (error.response?.status === 401 && !original._retry && !isPublicAuthRoute) {
       original._retry = true;
 
       // Queue concurrent 401s behind a single refresh call

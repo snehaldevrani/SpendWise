@@ -63,14 +63,16 @@ export class AuthService {
     });
 
     let matchedId: string | null = null;
+    let matchedExpiresAt: Date | null = null;
     for (const candidate of candidates) {
       if (await bcrypt.compare(token, candidate.tokenHash)) {
         matchedId = candidate.id;
+        matchedExpiresAt = candidate.expiresAt;
         break;
       }
     }
 
-    if (!matchedId) throw new UnauthorizedException('Refresh token invalid or expired');
+    if (!matchedId || !matchedExpiresAt) throw new UnauthorizedException('Refresh token invalid or expired');
 
     // Atomic consume — delete the matched row
     await this.prisma.refreshToken.delete({ where: { id: matchedId } });
@@ -78,7 +80,8 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
 
-    return this.issueTokens(user.id, user.email);
+    // Pass the original expiry so rotation does not extend the session clock
+    return this.issueTokens(user.id, user.email, matchedExpiresAt);
   }
 
   async logout(token: string): Promise<void> {
@@ -204,7 +207,7 @@ export class AuthService {
     return this.issueTokens(userId, email);
   }
 
-  private async issueTokens(userId: string, email: string): Promise<AuthTokens> {
+  private async issueTokens(userId: string, email: string, existingExpiresAt?: Date): Promise<AuthTokens> {
     const payload: JwtPayload = { sub: userId, email };
 
     const accessToken = this.jwt.sign(payload, {
@@ -212,21 +215,30 @@ export class AuthService {
       expiresIn: this.config.get('JWT_EXPIRES_IN'),
     });
 
+    // On fresh login/signup: create a new 24-hour session window.
+    // On rotation: reuse the original expiry so the session clock is never reset.
+    const refreshExpiresAt = existingExpiresAt ?? (() => {
+      const d = new Date();
+      d.setHours(d.getHours() + 24);
+      return d;
+    })();
+
+    // Sign the refresh JWT to expire at the same instant as the DB record,
+    // so neither layer can be used after the session window closes.
+    const remainingSecs = Math.max(1, Math.floor((refreshExpiresAt.getTime() - Date.now()) / 1000));
+
     // Refresh token is a signed JWT (allows userId extraction without a DB lookup),
     // but we only store a bcrypt hash — a DB breach cannot be used to hijack sessions.
     const refreshToken = this.jwt.sign(payload, {
       secret: this.config.get('JWT_REFRESH_SECRET'),
-      expiresIn: this.config.get('JWT_REFRESH_EXPIRES_IN'),
+      expiresIn: remainingSecs,
     });
     const tokenHash = await bcrypt.hash(refreshToken, 10);
 
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7);
-
     await this.prisma.refreshToken.create({
-      data: { tokenHash, userId, expiresAt },
+      data: { tokenHash, userId, expiresAt: refreshExpiresAt },
     });
 
-    return { accessToken, refreshToken };
+    return { accessToken, refreshToken, refreshExpiresAt };
   }
 }
