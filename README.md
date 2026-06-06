@@ -341,11 +341,12 @@ Toggle email notifications:
 - **`@ArrayMaxSize(50)` + `@MaxLength(2000)` on AI chat history** — prevents token-stuffing (previously unbounded history could send megabytes per request to Gemini)
 - **CSV/XLSX row + column + amount caps** — 10,000 row limit, 50 column limit, ₹1 billion amount cap; prevents DoS via oversized sheets
 - **Password reset O(1) lookup** — reset URL now includes `?id=<recordId>` for direct DB lookup; eliminates O(N) bcrypt scan across all active tokens
-- **AI prompt injection hardening** — merchant names sanitized (strip `\r\n\x00`, truncate to 100 chars); system instruction anti-injection framing; `--- BEGIN/END TRANSACTION DATA ---` and `--- USER QUESTION ---` delimiters in every Gemini call
+- **AI prompt injection hardening** — merchant names sanitized (`sanitizeForPrompt`: strip `\r\n\x00`, truncate to 100 chars); user chat question stripped of control characters before `sendMessage` to prevent delimiter-escape attacks; system instruction anti-injection framing; `--- BEGIN/END TRANSACTION DATA ---` and `--- USER QUESTION ---` delimiters in every Gemini call
 - **Frontend error message whitelisting** — raw server error strings in upload toasts, password-change toasts, and AI chat replaced with keyword-whitelisted or static fallbacks; prevents internal error details leaking to the UI
 - **Redis TLS cert validation configurable** — `rejectUnauthorized` controlled by `REDIS_TLS_REJECT_UNAUTHORIZED` env var; defaults to `true` in production; set to `'false'` only in dev
 - **Swagger UI hidden in production** — `SwaggerModule.setup()` only runs when `NODE_ENV !== 'production'`
 - **PII removed from log messages** — email addresses replaced with user IDs in all server log output
+- **Google OAuth startup warning** — `GoogleStrategy` emits a `Logger.warn` at boot if `GOOGLE_CLIENT_ID` or `GOOGLE_CLIENT_SECRET` is missing; missing OAuth credentials surface immediately in logs rather than silently 500-ing at login time
 - **Privacy policy page** at `/privacy` — documents all data flows including what Gemini receives
 
 ---
