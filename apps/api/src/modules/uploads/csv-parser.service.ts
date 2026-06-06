@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { parse } from 'csv-parse/sync';
-import * as XLSX from 'xlsx';
+import * as ExcelJS from 'exceljs';
 import * as crypto from 'crypto';
 import { TransactionCategory, TransactionType } from '@spendwise/shared-types';
 
@@ -79,6 +79,25 @@ const MAX_ROWS = 10_000;
 const MAX_COLS = 50;
 const MAX_AMOUNT = 1_000_000_000;
 
+function cellToString(v: ExcelJS.CellValue): string {
+  if (v === null || v === undefined) return '';
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  if (typeof v === 'string') return v;
+  if (typeof v === 'object') {
+    if ('richText' in v) return (v as ExcelJS.CellRichTextValue).richText.map((r) => r.text).join('');
+    if ('result' in v) {
+      const r = (v as { result: unknown }).result;
+      if (r instanceof Date) return r.toISOString().slice(0, 10);
+      if (typeof r === 'object' && r !== null) return '';
+      return String(r ?? '');
+    }
+    if ('text' in v) return String((v as { text: unknown }).text ?? '');
+    if ('error' in v) return '';
+  }
+  return '';
+}
+
 function parseAmount(raw: string): number {
   const cleaned = raw.replace(/[^\d.-]/g, '');
   const value = parseFloat(cleaned);
@@ -124,16 +143,26 @@ function parseDate(raw: string): Date {
 
 @Injectable()
 export class CsvParserService {
-  parse(buffer: Buffer, filename?: string, password?: string): ParseResult {
+  async parse(buffer: Buffer, filename?: string, password?: string): Promise<ParseResult> {
     let records: Record<string, string>[];
 
-    const isExcel = filename && /\.(xlsx?|xls)$/i.test(filename);
+    const isExcel = filename && /\.xlsx$/i.test(filename);
 
     if (isExcel) {
       try {
-        const wb = XLSX.read(buffer, { type: 'buffer', password: password || undefined, sheetRows: MAX_ROWS + 30 });
-        const sheet = wb.Sheets[wb.SheetNames[0]];
-        const allRows = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, defval: '' });
+        const workbook = new ExcelJS.Workbook();
+        // ExcelJS declares Buffer as `extends ArrayBuffer`; newer @types/node uses Buffer<ArrayBufferLike>.
+        // ExcelJS doesn't support password-encrypted xlsx; encrypted files are blocked earlier by magic-byte check.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await workbook.xlsx.load(buffer as any);
+        const sheet = workbook.worksheets[0];
+        if (!sheet) throw new BadRequestException('No worksheets found in file');
+
+        const allRows: string[][] = [];
+        sheet.eachRow({ includeEmpty: false }, (row) => {
+          allRows.push((row.values as ExcelJS.CellValue[]).slice(1).map(cellToString));
+        });
+
         if (allRows.length > MAX_ROWS) throw new BadRequestException(`File exceeds ${MAX_ROWS} row limit`);
         if ((allRows[0]?.length ?? 0) > MAX_COLS) throw new BadRequestException(`File exceeds ${MAX_COLS} column limit`);
 
@@ -141,28 +170,30 @@ export class CsvParserService {
         let headerIdx = -1;
         const knownHeaders = Object.keys(COLUMN_MAP);
         for (let i = 0; i < Math.min(30, allRows.length); i++) {
-          const cells = allRows[i].map((c) => String(c).trim().toLowerCase());
+          const cells = allRows[i].map((c) => c.trim().toLowerCase());
           const matches = cells.filter((c) => knownHeaders.includes(c));
           if (matches.length >= 2) { headerIdx = i; break; }
         }
 
         if (headerIdx === -1) throw new BadRequestException('Could not find data headers in the file. Expected columns like Date, Narration, Amount.');
 
-        const headers = allRows[headerIdx].map((c) => String(c).trim());
+        const headers = allRows[headerIdx].map((c) => c.trim());
         const dataRows = allRows.slice(headerIdx + 1);
 
         // Skip separator rows (all asterisks or empty)
         records = dataRows
-          .filter((row) => row.some((cell) => String(cell).trim() && !/^\*+$/.test(String(cell).trim())))
+          .filter((row) => row.some((cell) => cell.trim() && !/^\*+$/.test(cell.trim())))
           .map((row) => {
             const obj: Record<string, string> = {};
-            headers.forEach((h, idx) => { obj[h] = String(row[idx] ?? '').trim(); });
+            headers.forEach((h, idx) => { obj[h] = (row[idx] ?? '').trim(); });
             return obj;
           })
           .filter((obj) => Object.values(obj).some((v) => v && !/^\*+$/.test(v)));
       } catch (err) {
-        const msg = (err as Error).message || '';
-        if (msg.includes('password')) throw new BadRequestException('File is password-protected. Please provide the correct password.');
+        const msg = (err as Error).message?.toLowerCase() ?? '';
+        if (msg.includes('password') || msg.includes('decrypt') || msg.includes('incorrect')) {
+          throw new BadRequestException('File is password-protected. Please provide the correct password.');
+        }
         if (err instanceof BadRequestException) throw err;
         throw new BadRequestException('Could not parse Excel file');
       }

@@ -90,13 +90,6 @@ describe('UploadsService', () => {
       await expect(service.importCsv('u1', fakeXlsx)).rejects.toThrow('XLSX format');
     });
 
-    it('throws BadRequestException if .xls file does not have OLE2 magic bytes', async () => {
-      const fakeXls = makeFile('', 'bank.xls', 'application/vnd.ms-excel');
-      fakeXls.buffer = Buffer.from([0x00, 0x01, 0x02, 0x03]);
-
-      await expect(service.importCsv('u1', fakeXls)).rejects.toThrow(BadRequestException);
-      await expect(service.importCsv('u1', fakeXls)).rejects.toThrow('XLS format');
-    });
   });
 
   describe('importCsv — full flow', () => {

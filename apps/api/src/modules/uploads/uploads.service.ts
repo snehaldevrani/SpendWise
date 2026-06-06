@@ -23,8 +23,8 @@ export class UploadsService {
 
   async importCsv(userId: string, file: Express.Multer.File, password?: string): Promise<CsvImportResult> {
     const ext = file.originalname.toLowerCase();
-    if (!ext.endsWith('.csv') && !ext.endsWith('.xlsx') && !ext.endsWith('.xls') && !ext.endsWith('.pdf')) {
-      throw new BadRequestException('Supported formats: CSV, XLS, XLSX, PDF');
+    if (!ext.endsWith('.csv') && !ext.endsWith('.xlsx') && !ext.endsWith('.pdf')) {
+      throw new BadRequestException('Supported formats: CSV, XLSX, PDF');
     }
 
     // Validate magic bytes to prevent disguised file attacks
@@ -33,7 +33,7 @@ export class UploadsService {
     const isPdf = ext.endsWith('.pdf');
     const { rows, errors } = isPdf
       ? await this.csvParser.parsePdf(file.buffer)
-      : this.csvParser.parse(file.buffer, file.originalname, password);
+      : await this.csvParser.parse(file.buffer, file.originalname, password);
 
     // Wipe previous data so each upload starts fresh
     await this.prisma.subscription.deleteMany({ where: { userId } });
@@ -117,12 +117,6 @@ export class UploadsService {
       // XLSX is a ZIP file — magic bytes: 50 4B 03 04
       const isZip = buffer[0] === 0x50 && buffer[1] === 0x4b && buffer[2] === 0x03 && buffer[3] === 0x04;
       if (!isZip) throw new BadRequestException('File content does not match XLSX format');
-    }
-
-    if (filename.endsWith('.xls')) {
-      // XLS is OLE2 Compound Document — magic bytes: D0 CF 11 E0
-      const isOle = buffer[0] === 0xd0 && buffer[1] === 0xcf && buffer[2] === 0x11 && buffer[3] === 0xe0;
-      if (!isOle) throw new BadRequestException('File content does not match XLS format');
     }
   }
 

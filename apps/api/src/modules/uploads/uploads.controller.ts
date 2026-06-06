@@ -23,13 +23,12 @@ import { IMPORT_QUEUE } from '../../jobs/queue.constants';
 
 const STRICT_MIMETYPES = new Set([
   'text/csv',
-  'application/vnd.ms-excel',                                           // .xls
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',  // .xlsx
-  'application/pdf',                                                    // .pdf
+  'application/pdf',
 ]);
 // Some browsers send application/octet-stream or text/plain for CSV files;
 // fall back to extension check so we don't reject valid uploads.
-const ALLOWED_EXTENSIONS = ['.csv', '.xlsx', '.xls', '.pdf'];
+const ALLOWED_EXTENSIONS = ['.csv', '.xlsx', '.pdf'];
 
 @ApiTags('uploads')
 @ApiBearerAuth()
