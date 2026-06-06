@@ -1,5 +1,6 @@
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { PrismaService } from '../../common/prisma/prisma.service';
 
 interface ResendResponse {
   id?: string;
@@ -13,7 +14,7 @@ export class AlertsService {
   private readonly resendApiKey: string;
   private readonly fromEmail: string;
 
-  constructor(private config: ConfigService) {
+  constructor(private config: ConfigService, private prisma: PrismaService) {
     this.resendApiKey = this.config.get('RESEND_API_KEY', '');
     this.fromEmail = this.config.get('RESEND_FROM_EMAIL', 'alerts@spendwise.app');
   }
@@ -48,12 +49,13 @@ export class AlertsService {
     this.logger.log(`Alert sent via Resend: ${result.id}`);
   }
 
-  async sendTestAlert(userId: string, email?: string): Promise<{ message: string }> {
-    const to = email ?? 'test@example.com';
+  async sendTestAlert(userId: string): Promise<{ message: string }> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+    if (!user) throw new NotFoundException('User not found');
     await this.sendAlert(
-      to,
+      user.email,
       'SpendWise — Test Alert',
-      `<p>This is a test alert from SpendWise for user <strong>${userId}</strong>.</p>
+      `<p>This is a test alert from SpendWise.</p>
        <p>Your alert delivery is working correctly.</p>`,
     );
     return { message: 'Test alert sent successfully' };

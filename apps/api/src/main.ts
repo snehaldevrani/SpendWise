@@ -53,18 +53,19 @@ async function bootstrap() {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
-  const config = new DocumentBuilder()
-    .setTitle('SpendWise API')
-    .setDescription('Personal finance intelligence API')
-    .setVersion('1.0')
-    .addBearerAuth()
-    .build();
-  SwaggerModule.setup('api/docs', app, SwaggerModule.createDocument(app, config));
+  if (process.env.NODE_ENV !== 'production') {
+    const config = new DocumentBuilder()
+      .setTitle('SpendWise API')
+      .setDescription('Personal finance intelligence API')
+      .setVersion('1.0')
+      .addBearerAuth()
+      .build();
+    SwaggerModule.setup('api/docs', app, SwaggerModule.createDocument(app, config));
+  }
 
   const port = process.env.PORT ?? 3001;
   await app.listen(port);
   console.log(`SpendWise API running on http://localhost:${port}/api`);
-  console.log(`Swagger docs: http://localhost:${port}/api/docs`);
 }
 
 bootstrap();

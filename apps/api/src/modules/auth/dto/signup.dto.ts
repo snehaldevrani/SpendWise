@@ -1,4 +1,4 @@
-import { IsEmail, IsString, Matches, MinLength } from 'class-validator';
+import { IsEmail, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 
 export class SignupDto {
   // @IsEmail() validates RFC 5322 format; @Matches enforces a real TLD (2+ chars)
@@ -7,6 +7,7 @@ export class SignupDto {
   email!: string;
 
   @IsString()
+  @MaxLength(128)
   @MinLength(8, { message: 'Password must be at least 8 characters' })
   @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/, {
     message: 'Password must contain at least one uppercase letter, one lowercase letter, and one number',

@@ -21,14 +21,15 @@ import { UploadsService } from './uploads.service';
 import { CurrentUser, AuthUser } from '../auth/decorators/current-user.decorator';
 import { IMPORT_QUEUE } from '../../jobs/queue.constants';
 
-const ALLOWED_MIMETYPES = new Set([
+const STRICT_MIMETYPES = new Set([
   'text/csv',
-  'text/plain',                                                          // some banks label CSV as text/plain
   'application/vnd.ms-excel',                                           // .xls
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',  // .xlsx
-  'application/octet-stream',                                           // fallback for some browsers on .csv
   'application/pdf',                                                    // .pdf
 ]);
+// Some browsers send application/octet-stream or text/plain for CSV files;
+// fall back to extension check so we don't reject valid uploads.
+const ALLOWED_EXTENSIONS = ['.csv', '.xlsx', '.xls', '.pdf'];
 
 @ApiTags('uploads')
 @ApiBearerAuth()
@@ -46,10 +47,11 @@ export class UploadsController {
     FileInterceptor('file', {
       limits: { fileSize: 10 * 1024 * 1024 },
       fileFilter: (_req, file, cb) => {
-        if (ALLOWED_MIMETYPES.has(file.mimetype)) {
+        const extOk = ALLOWED_EXTENSIONS.some((e) => file.originalname.toLowerCase().endsWith(e));
+        if (STRICT_MIMETYPES.has(file.mimetype) || extOk) {
           cb(null, true);
         } else {
-          cb(new BadRequestException(`Unsupported file type: ${file.mimetype}. Supported formats: CSV, XLS, XLSX, PDF`), false);
+          cb(new BadRequestException(`Unsupported file type. Supported formats: CSV, XLS, XLSX, PDF`), false);
         }
       },
     }),
@@ -68,7 +70,7 @@ export class UploadsController {
    * Streams ~every 1.5 s until all jobs are completed or failed (max ~5 min).
    */
   @Sse('progress')
-  streamProgress(@Query('jobs') jobs: string): Observable<MessageEvent> {
+  streamProgress(@CurrentUser() user: AuthUser, @Query('jobs') jobs: string): Observable<MessageEvent> {
     const jobIds = (jobs ?? '').split(',').filter(Boolean).slice(0, 3);
     const STEP_NAMES = ['Generating embeddings', 'Detecting subscriptions', 'Computing insights'];
 
@@ -80,6 +82,8 @@ export class UploadsController {
             const job = await this.importQueue.getJob(id);
             // null = job cleaned up after completion, treat as completed
             if (!job) return 'completed';
+            // Only expose jobs that belong to the authenticated user
+            if (job.data?.userId !== user.id) return 'completed';
             return job.getState();
           }),
         );

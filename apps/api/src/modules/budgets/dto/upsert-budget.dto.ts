@@ -9,6 +9,7 @@ export class UpsertBudgetDto {
 
   @IsNumber()
   @Min(1)
+  @Max(9_999_999)
   limitAmount!: number;
 
   /** Set to true to create a budget that applies to all months automatically. */

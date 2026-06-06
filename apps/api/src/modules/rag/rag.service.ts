@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Prisma } from '@prisma/client';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { PrismaService } from '../../common/prisma/prisma.service';
 
@@ -76,7 +75,7 @@ export class RagService {
     }
   }
 
-  async search(userId: string, query: string, topK = TOP_K): Promise<string[]> {
+  async search(userId: string, query: string): Promise<string[]> {
     let queryEmbedding: number[];
     try {
       const embeddings = await this.embedTexts([query]);
@@ -97,7 +96,7 @@ export class RagService {
       FROM transactions
       WHERE user_id = ${userId} AND embedding IS NOT NULL
       ORDER BY embedding <=> ${vectorLiteral}::vector
-      LIMIT ${Prisma.raw(String(topK))}
+      LIMIT 8
     `;
 
     return results.map(

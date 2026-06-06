@@ -1,4 +1,4 @@
-import { IsString, MinLength, MaxLength, IsArray, IsOptional, ValidateNested, IsIn } from 'class-validator';
+import { IsString, MinLength, MaxLength, IsArray, IsOptional, ValidateNested, IsIn, ArrayMaxSize } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class ChatHistoryTurn {
@@ -6,6 +6,7 @@ export class ChatHistoryTurn {
   role!: 'user' | 'model';
 
   @IsString()
+  @MaxLength(2000)
   parts!: string;
 }
 
@@ -18,6 +19,7 @@ export class ChatDto {
   /** Conversation history from previous turns. Empty array = first message. */
   @IsArray()
   @IsOptional()
+  @ArrayMaxSize(50)
   @ValidateNested({ each: true })
   @Type(() => ChatHistoryTurn)
   history?: ChatHistoryTurn[];

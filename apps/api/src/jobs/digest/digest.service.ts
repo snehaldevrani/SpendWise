@@ -117,9 +117,9 @@ export class DigestService {
       `;
 
       await this.alerts.sendAlert(email, 'SpendWise — Your Weekly Financial Digest', html);
-      this.logger.log(`Weekly digest sent to ${email}`);
+      this.logger.log(`Weekly digest sent for user ${userId}`);
     } catch (err) {
-      this.logger.error(`Failed to send digest to ${email}: ${(err as Error).message}`);
+      this.logger.error(`Failed to send digest for user ${userId}: ${(err as Error).message}`);
     }
   }
 }

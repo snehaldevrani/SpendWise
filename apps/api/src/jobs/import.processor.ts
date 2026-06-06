@@ -83,6 +83,6 @@ export class ImportProcessor extends WorkerHost {
     }));
 
     await this.alerts.sendSubscriptionLeakAlert(user.email, leakPayload);
-    this.logger.log(`Sent leak alert to ${user.email} for ${leaks.length} leak(s)`);
+    this.logger.log(`Sent leak alert for user ${userId} (${leaks.length} leak(s))`);
   }
 }
