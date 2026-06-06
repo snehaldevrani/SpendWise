@@ -6,19 +6,11 @@ import { api } from '@/lib/api';
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const { user, setUser } = useAuthStore();
-  // 'checking' = waiting for Zustand hydration + optional /users/me call
+  const { setUser } = useAuthStore();
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    // If Zustand already has a user (persisted from localStorage), done.
-    if (user) {
-      setChecking(false);
-      return;
-    }
-
-    // Zustand is empty — could be first load after OAuth or a page refresh
-    // where localStorage was cleared. Try to hydrate from the API cookie.
+    // Always verify session server-side — closes stale-session bypass window.
     api
       .get('/users/me')
       .then(({ data }) => {
@@ -26,7 +18,6 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
         setChecking(false);
       })
       .catch(() => {
-        // No valid session at all — go to login
         router.replace('/login');
       });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps

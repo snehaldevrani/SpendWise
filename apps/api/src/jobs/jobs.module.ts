@@ -15,7 +15,7 @@ import { IMPORT_QUEUE } from './queue.constants';
       imports: [ConfigModule],
       useFactory: (config: ConfigService) => {
         const redisUrl = new URL(config.get('REDIS_URL', 'redis://localhost:6379'));
-        const tls = redisUrl.protocol === 'rediss:' ? { rejectUnauthorized: false } : undefined;
+        const tls = redisUrl.protocol === 'rediss:' ? { rejectUnauthorized: config.get('REDIS_TLS_REJECT_UNAUTHORIZED') !== 'false' } : undefined;
         return {
           connection: {
             host: redisUrl.hostname,
