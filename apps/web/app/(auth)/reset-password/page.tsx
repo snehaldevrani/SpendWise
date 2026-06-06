@@ -43,12 +43,13 @@ function ResetPasswordForm() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const token = searchParams.get("token");
+  const id = searchParams.get("id");
 
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormData>({
     resolver: zodResolver(schema),
   });
 
-  if (!token) {
+  if (!token || !id) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-6">
         <div className="w-full max-w-md rounded-2xl border border-red-500/20 bg-zinc-900/60 p-8 text-center">
@@ -65,7 +66,7 @@ function ResetPasswordForm() {
 
   const onSubmit = async (data: FormData) => {
     try {
-      await api.post('/auth/reset-password', { token, newPassword: data.newPassword });
+      await api.post('/auth/reset-password', { token, recordId: id, newPassword: data.newPassword });
       setDone(true);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;

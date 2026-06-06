@@ -79,9 +79,8 @@ export default function InsightsPage() {
 
       const res = await api.post<{ answer: string; sourcesUsed: number }>("/ai/chat", { question, history });
       addMessage({ id: Date.now() + 1, role: "assistant", content: res.data.answer });
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Sorry, I couldn't answer that right now. Please try again.";
-      addMessage({ id: Date.now() + 1, role: "assistant", content: msg });
+    } catch {
+      addMessage({ id: Date.now() + 1, role: "assistant", content: "Sorry, I couldn't answer that right now. Please try again." });
     } finally {
       setIsTyping(false);
     }

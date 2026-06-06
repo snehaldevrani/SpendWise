@@ -145,7 +145,9 @@ export function UploadDialog() {
       }
     } catch (err: unknown) {
       clearInterval(tick);
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Upload failed';
+      const rawMsg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? '';
+      const SAFE_UPLOAD_MSGS = ['password', 'format', 'empty', 'header', 'unsupported', 'row limit', 'column limit', 'invalid csv'];
+      const msg = SAFE_UPLOAD_MSGS.some((k) => rawMsg.toLowerCase().includes(k)) ? rawMsg : 'Upload failed. Please check your file and try again.';
       setErrorMsg(msg);
       setState('error');
     }

@@ -64,8 +64,10 @@ export default function SettingsPage() {
       setCurrentPassword(''); setNewPassword(''); setConfirmPassword('');
     },
     onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      toast.error(msg || 'Failed to update password');
+      const rawMsg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? '';
+      const SAFE_MSGS = ['current password is incorrect', 'no password set'];
+      const msg = SAFE_MSGS.some((k) => rawMsg.toLowerCase().includes(k)) ? rawMsg : 'Failed to update password';
+      toast.error(msg);
     },
   });
 

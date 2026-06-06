@@ -125,12 +125,12 @@ export class AuthService {
     const tokenHash = await bcrypt.hash(rawToken, 10);
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
-    await this.prisma.passwordResetToken.create({
+    const record = await this.prisma.passwordResetToken.create({
       data: { userId: user.id, tokenHash, expiresAt },
     });
 
     const frontendUrl = this.config.get<string>('FRONTEND_URL');
-    const resetUrl = `${frontendUrl}/reset-password?token=${rawToken}`;
+    const resetUrl = `${frontendUrl}/reset-password?id=${record.id}&token=${rawToken}`;
 
     await this.alerts.sendAlert(
       email,
@@ -150,27 +150,21 @@ export class AuthService {
     );
   }
 
-  async resetPassword(rawToken: string, newPassword: string): Promise<void> {
-    const candidates = await this.prisma.passwordResetToken.findMany({
-      where: { usedAt: null, expiresAt: { gt: new Date() } },
+  async resetPassword(rawToken: string, newPassword: string, recordId: string): Promise<void> {
+    const candidate = await this.prisma.passwordResetToken.findFirst({
+      where: { id: recordId, usedAt: null, expiresAt: { gt: new Date() } },
     });
 
-    let matched: { id: string; userId: string } | null = null;
-    for (const c of candidates) {
-      if (await bcrypt.compare(rawToken, c.tokenHash)) {
-        matched = { id: c.id, userId: c.userId };
-        break;
-      }
+    if (!candidate || !(await bcrypt.compare(rawToken, candidate.tokenHash))) {
+      throw new BadRequestException('Invalid or expired reset token');
     }
-
-    if (!matched) throw new BadRequestException('Invalid or expired reset token');
 
     const passwordHash = await bcrypt.hash(newPassword, 12);
 
     await this.prisma.$transaction([
-      this.prisma.passwordResetToken.update({ where: { id: matched.id }, data: { usedAt: new Date() } }),
-      this.prisma.user.update({ where: { id: matched.userId }, data: { passwordHash } }),
-      this.prisma.refreshToken.deleteMany({ where: { userId: matched.userId } }),
+      this.prisma.passwordResetToken.update({ where: { id: candidate.id }, data: { usedAt: new Date() } }),
+      this.prisma.user.update({ where: { id: candidate.userId }, data: { passwordHash } }),
+      this.prisma.refreshToken.deleteMany({ where: { userId: candidate.userId } }),
     ]);
   }
 

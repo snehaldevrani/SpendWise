@@ -5,6 +5,9 @@ export class ResetPasswordDto {
   token!: string;
 
   @IsString()
+  recordId!: string;
+
+  @IsString()
   @MaxLength(128)
   @MinLength(8)
   @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/, {

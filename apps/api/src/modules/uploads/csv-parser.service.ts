@@ -75,10 +75,15 @@ function normalizeHeaders(headers: string[]): Record<string, string> {
   return map;
 }
 
+const MAX_ROWS = 10_000;
+const MAX_COLS = 50;
+const MAX_AMOUNT = 1_000_000_000;
+
 function parseAmount(raw: string): number {
   const cleaned = raw.replace(/[^\d.-]/g, '');
   const value = parseFloat(cleaned);
   if (isNaN(value)) throw new Error(`Cannot parse amount: "${raw}"`);
+  if (Math.abs(value) > MAX_AMOUNT) throw new Error('Amount exceeds maximum allowed value');
   return Math.abs(value);
 }
 
@@ -126,9 +131,11 @@ export class CsvParserService {
 
     if (isExcel) {
       try {
-        const wb = XLSX.read(buffer, { type: 'buffer', password: password || undefined });
+        const wb = XLSX.read(buffer, { type: 'buffer', password: password || undefined, sheetRows: MAX_ROWS + 30 });
         const sheet = wb.Sheets[wb.SheetNames[0]];
         const allRows = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, defval: '' });
+        if (allRows.length > MAX_ROWS) throw new BadRequestException(`File exceeds ${MAX_ROWS} row limit`);
+        if ((allRows[0]?.length ?? 0) > MAX_COLS) throw new BadRequestException(`File exceeds ${MAX_COLS} column limit`);
 
         // Find the header row by scanning for known column names
         let headerIdx = -1;
@@ -165,6 +172,7 @@ export class CsvParserService {
           columns: true,
           skip_empty_lines: true,
           trim: true,
+          to: MAX_ROWS,
         }) as Record<string, string>[];
       } catch {
         throw new BadRequestException('Invalid CSV file — could not parse');
