@@ -332,7 +332,20 @@ Toggle email notifications:
 - **Per-user AI rate limits** — Redis counters with 24h TTL
 - **Redis-backed rate limiting** — `@nest-lab/throttler-storage-redis` ensures rate limit counters survive server restarts; auth endpoints throttled to 5/15 min, uploads to 10/hour, password reset to 3/hour
 - **Password reset via email** — single-use bcrypt-hashed token, 1-hour expiry; all sessions revoked on reset
-- **Google OAuth** — `passport-google-oauth20`; `prompt: 'select_account'` forces account picker on every sign-in; after Google's callback the API redirects to `/callback` (not directly to `/dashboard`) so the Next.js client can call `/users/me`, populate the Zustand auth store, and then navigate to `/dashboard`; `AuthGuard` also calls `/users/me` as a fallback when Zustand is empty (handles page refreshes with a valid cookie)
+- **Google OAuth** — `passport-google-oauth20`; `prompt: 'select_account'` forces account picker on every sign-in; after Google's callback the API redirects to `/callback` (not directly to `/dashboard`) so the Next.js client can call `/users/me`, populate the Zustand auth store, and then navigate to `/dashboard`; `AuthGuard` always calls `/users/me` on every mount — no fast-path bypass — closing the stale-session window
+- **ThrottlerGuard registered as global APP_GUARD** — all `@Throttle()` decorators are now actively enforced; auth endpoints: 5 req/15 min; uploads: 10/hour; password reset: 3/hour
+- **SSE job ownership check** — `GET /uploads/progress` verifies `job.data.userId === authenticatedUser.id`; prevents polling another user's import jobs
+- **Strict MIME type allowlist on upload** — only `text/csv`, `application/vnd.ms-excel`, `.xlsx`, and `application/pdf` accepted; `application/octet-stream` and `text/plain` removed
+- **`@MaxLength(128)` on all password DTO fields** — caps both bcrypt and regex work on public auth endpoints; prevents ReDoS amplification attacks
+- **`@Max(9_999_999)` on budget `limitAmount`** — prevents `Infinity`/numeric overflow reaching the DB
+- **`@ArrayMaxSize(50)` + `@MaxLength(2000)` on AI chat history** — prevents token-stuffing (previously unbounded history could send megabytes per request to Gemini)
+- **CSV/XLSX row + column + amount caps** — 10,000 row limit, 50 column limit, ₹1 billion amount cap; prevents DoS via oversized sheets
+- **Password reset O(1) lookup** — reset URL now includes `?id=<recordId>` for direct DB lookup; eliminates O(N) bcrypt scan across all active tokens
+- **AI prompt injection hardening** — merchant names sanitized (strip `\r\n\x00`, truncate to 100 chars); system instruction anti-injection framing; `--- BEGIN/END TRANSACTION DATA ---` and `--- USER QUESTION ---` delimiters in every Gemini call
+- **Frontend error message whitelisting** — raw server error strings in upload toasts, password-change toasts, and AI chat replaced with keyword-whitelisted or static fallbacks; prevents internal error details leaking to the UI
+- **Redis TLS cert validation configurable** — `rejectUnauthorized` controlled by `REDIS_TLS_REJECT_UNAUTHORIZED` env var; defaults to `true` in production; set to `'false'` only in dev
+- **Swagger UI hidden in production** — `SwaggerModule.setup()` only runs when `NODE_ENV !== 'production'`
+- **PII removed from log messages** — email addresses replaced with user IDs in all server log output
 - **Privacy policy page** at `/privacy` — documents all data flows including what Gemini receives
 
 ---
@@ -444,6 +457,8 @@ GOOGLE_CALLBACK_URL=https://<your-render-api-url>/api/auth/google/callback
 NODE_ENV=production
 PORT=3001
 FRONTEND_URL=https://<your-vercel-url>.vercel.app
+# Optional — only needed in local dev with self-signed Redis certs
+# REDIS_TLS_REJECT_UNAUTHORIZED=false
 ```
 
 ### Vercel environment variable
@@ -465,7 +480,7 @@ The API container runs `prisma migrate deploy` automatically on every startup, s
 
 ---
 
-7 test suites · 94 tests · 100% pass rate
+7 test suites · 95 tests · 100% pass rate
 
 | Suite | Coverage |
 |-------|---------|
