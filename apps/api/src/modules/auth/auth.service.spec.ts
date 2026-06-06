@@ -137,10 +137,11 @@ describe('AuthService', () => {
     it('issues new tokens for a valid refresh token', async () => {
       const rawToken = 'valid-refresh-jwt';
       const tokenHash = await bcrypt.hash(rawToken, 10);
+      const originalExpiry = new Date(Date.now() + 20 * 60 * 60 * 1000); // 20h from now
 
       mockJwt.verify.mockReturnValue({ sub: 'user-1', email: 'user@test.com' });
       mockPrisma.refreshToken.findMany.mockResolvedValue([
-        { id: 'rt-1', tokenHash },
+        { id: 'rt-1', tokenHash, expiresAt: originalExpiry },
       ]);
       mockPrisma.refreshToken.delete.mockResolvedValue({});
       mockPrisma.user.findUnique.mockResolvedValue({ id: 'user-1', email: 'user@test.com' });
@@ -148,7 +149,30 @@ describe('AuthService', () => {
 
       const result = await service.refresh(rawToken);
       expect(result).toHaveProperty('accessToken');
+      expect(result).toHaveProperty('refreshToken');
+      expect(result).toHaveProperty('refreshExpiresAt');
       expect(mockPrisma.refreshToken.delete).toHaveBeenCalledWith({ where: { id: 'rt-1' } });
+    });
+
+    it('preserves original expiry on rotation (does not reset session clock)', async () => {
+      const rawToken = 'rotation-test-jwt';
+      const tokenHash = await bcrypt.hash(rawToken, 10);
+      const originalExpiry = new Date(Date.now() + 3 * 60 * 60 * 1000); // 3h remaining
+
+      mockJwt.verify.mockReturnValue({ sub: 'user-1', email: 'user@test.com' });
+      mockPrisma.refreshToken.findMany.mockResolvedValue([
+        { id: 'rt-2', tokenHash, expiresAt: originalExpiry },
+      ]);
+      mockPrisma.refreshToken.delete.mockResolvedValue({});
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'user-1', email: 'user@test.com' });
+      mockPrisma.refreshToken.create.mockResolvedValue({});
+
+      const result = await service.refresh(rawToken);
+      // refreshExpiresAt must equal the original expiry, not now+24h
+      expect(result.refreshExpiresAt.getTime()).toBe(originalExpiry.getTime());
+      // The DB record must also use the original expiry
+      const createCall = mockPrisma.refreshToken.create.mock.calls[0][0];
+      expect(createCall.data.expiresAt.getTime()).toBe(originalExpiry.getTime());
     });
 
     it('throws UnauthorizedException for an expired/invalid JWT', async () => {
