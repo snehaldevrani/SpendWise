@@ -24,7 +24,7 @@ Upload your bank statement once. SpendWise automatically categorises every trans
 | **Dashboard date range** | Dropdown to view stat cards across This month / Last 2 months / Last 3 months / Last 6 months — aggregates Money Out / Money In / Net Savings over the selected window |
 | **6-month category trends** | Stacked bar chart showing month-by-month spend across all categories |
 | **Weekly spending summaries** | ISO-week groupings with total spend, income, category breakdown, top merchants |
-| **RAG AI chat** | Ask questions about your own finances; Gemini `gemini-embedding-2` embeddings + pgvector cosine search provides supplemental context; full transaction history injected into every prompt for factually accurate answers; chat history persisted in localStorage across navigation |
+| **RAG AI chat** | Ask questions about your own finances; Gemini `gemini-embedding-2` embeddings + pgvector cosine search provides supplemental context; full transaction history injected into every prompt for factually accurate answers; chat history persisted in sessionStorage within the tab session |
 | **AI recommendations** | Structured savings recommendations: top leaks, estimated monthly savings, action checklist — Redis-cached 6h, per-user rate limited |
 | **Weekly email digest** | Every Monday: last week's spend, income, net savings, top categories and merchants — opt-in via Settings |
 | **Email alerts** | New subscription leak detected → immediate notification |
@@ -349,6 +349,19 @@ Toggle email notifications:
 - **PII removed from log messages** — email addresses replaced with user IDs in all server log output
 - **Google OAuth startup warning** — `GoogleStrategy` emits a `Logger.warn` at boot if `GOOGLE_CLIENT_ID` or `GOOGLE_CLIENT_SECRET` is missing; missing OAuth credentials surface immediately in logs rather than silently 500-ing at login time
 - **Privacy policy page** at `/privacy` — documents all data flows including what Gemini receives
+- **Constant-time login** — `bcrypt.compare` runs against a dummy hash even when the email doesn't exist; eliminates the ~100 ms vs ~1 ms timing oracle that would otherwise reveal valid email addresses via response time
+- **OAuth CSRF state parameter** — `passport-google-oauth20` configured with `state: true`; per-request nonce validated on callback to prevent CSRF login attacks
+- **RAG UPDATE scoped to user** — `UPDATE transactions SET embedding = ...` includes `AND user_id = $userId` guard; closes a defense-in-depth gap where the SELECT was already scoped but the UPDATE was not
+- **`@MaxLength` on email and token DTO fields** — `email` fields capped at 254 chars (RFC 5321 max); `refreshToken` at 1024 chars; `token` and `recordId` on reset-password capped at 512 / 36 chars; prevents long-string DoS via JWT verification and validator.js regex on public endpoints
+- **HTML escaping in email templates** — merchant names from CSV/PDF data are escaped (`&`, `<`, `>`, `"`, `'`) before insertion into Resend HTML email bodies; prevents XSS payloads in HTML-capable email clients
+- **`@Throttle` on AI endpoints** — `GET /ai/recommendations` limited to 10 req/min, `POST /ai/chat` to 30 req/min per user; separate from the daily Redis counters; prevents per-burst token-amplification attacks
+- **Transaction query parameter bounds** — `?days` clamped to 1–365, `?months` to 1–24, `?month`/`?year` validated to real calendar ranges (2000–2100); date-range queries validate ISO format and reject ranges over 2 years; prevents billion-iteration loops and full-table scans via crafted query strings
+- **Next.js security headers** — `headers()` export in `next.config.ts` sets `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy`, and a `Content-Security-Policy` (including `connect-src` scoped to the API origin) on every page response
+- **CORS explicit config** — `app.enableCors()` specifies exact `methods`, `allowedHeaders`, and `origin`; removes the default behaviour of reflecting any method or header from preflight requests
+- **GuestGuard server-side verification** — login/signup pages call `GET /users/me` before rendering; active sessions are redirected to dashboard without relying on stale Zustand state, eliminating redirect-loop scenarios after cookie expiry
+- **Zustand persisted to sessionStorage** — both `useChatStore` and `useAuthStore` use a custom sessionStorage adapter instead of localStorage; financial chat history and auth state are tab-scoped and cleared on tab close, preventing data leakage across browser sessions
+- **PDF parser row ceiling** — `parsePdf()` now enforces the same `MAX_ROWS = 10,000` limit as CSV/XLSX parsers; previously the PDF path had no cap, allowing unbounded memory use via crafted large PDFs
+- **Production log level restriction** — NestJS app created with `logger: ['log', 'warn', 'error']` in production; `debug` and `verbose` levels (which can emit request bodies and token fragments) are only enabled in development
 
 ---
 
