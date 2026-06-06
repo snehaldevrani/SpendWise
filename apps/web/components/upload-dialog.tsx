@@ -56,7 +56,7 @@ export function UploadDialog() {
   useEffect(() => {
     if (state !== 'processing' || !jobIds.length) return;
 
-    const url = `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api'}/uploads/progress?jobs=${jobIds.join(',')}`;
+    const url = `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api'}/uploads/progress?jobs=${jobIds.map(encodeURIComponent).join(',')}`;
     const es = new EventSource(url, { withCredentials: true });
 
     es.onmessage = (e: MessageEvent<string>) => {

@@ -2,24 +2,27 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store';
+import { api } from '@/lib/api';
 
 export function GuestGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const user = useAuthStore((s) => s.user);
-  const [mounted, setMounted] = useState(false);
+  const { setUser } = useAuthStore();
+  const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    setMounted(true);
-  }, []);
+    // Always verify server-side — stale sessionStorage alone is not sufficient.
+    api
+      .get('/users/me')
+      .then(({ data }) => {
+        setUser(data);
+        router.replace('/dashboard');
+      })
+      .catch(() => {
+        setChecking(false);
+      });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    if (mounted && user) {
-      router.replace('/dashboard');
-    }
-  }, [mounted, user, router]);
-
-  if (!mounted) return null;
-  if (user) return null;
+  if (checking) return null;
 
   return <>{children}</>;
 }

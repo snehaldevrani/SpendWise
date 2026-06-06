@@ -61,9 +61,13 @@ export class AlertsService {
     return { message: 'Test alert sent successfully' };
   }
 
+  private escapeHtml(s: string): string {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;');
+  }
+
   async sendSubscriptionLeakAlert(email: string, leaks: Array<{ merchant: string; annualCost: number }>): Promise<void> {
     const rows = leaks
-      .map((l) => `<li><strong>${l.merchant}</strong> — ₹${l.annualCost.toLocaleString()} / year</li>`)
+      .map((l) => `<li><strong>${this.escapeHtml(l.merchant)}</strong> — ₹${l.annualCost.toLocaleString()} / year</li>`)
       .join('');
 
     await this.sendAlert(

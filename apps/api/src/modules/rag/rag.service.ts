@@ -57,7 +57,7 @@ export class RagService {
         // Use Prisma tagged template ($executeRaw) — parameters are bound, not interpolated.
         // The embedding array is serialised to a string first, then passed as a typed $1 parameter.
         const vectorLiteral = `[${embedding.join(',')}]`;
-        await this.prisma.$executeRaw`UPDATE transactions SET embedding = ${vectorLiteral}::vector WHERE id = ${txns[i].id}`;
+        await this.prisma.$executeRaw`UPDATE transactions SET embedding = ${vectorLiteral}::vector WHERE id = ${txns[i].id} AND user_id = ${userId}`;
       }
     } catch (err) {
       this.logger.error('Failed to embed transactions', err);

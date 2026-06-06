@@ -300,6 +300,7 @@ export class CsvParserService {
     let rowNum = 0;
 
     for (const line of lines) {
+      if (rows.length >= MAX_ROWS) break;
       const dateMatch = line.match(dateRe);
       if (!dateMatch) continue;
       rowNum++;

@@ -37,10 +37,11 @@ export class AuthService {
 
   async login(dto: LoginDto): Promise<AuthTokens> {
     const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
-    if (!user || !user.passwordHash) throw new UnauthorizedException('Invalid credentials');
-
-    const passwordMatch = await bcrypt.compare(dto.password, user.passwordHash);
-    if (!passwordMatch) throw new UnauthorizedException('Invalid credentials');
+    // Always run bcrypt.compare to prevent email enumeration via response-time differences.
+    // A constant dummy hash is used when the user doesn't exist so the timing is identical.
+    const DUMMY_HASH = '$2b$12$invalidhashpaddinginvalidhashpaddinginvalidhash000000';
+    const passwordMatch = await bcrypt.compare(dto.password, user?.passwordHash ?? DUMMY_HASH);
+    if (!user || !user.passwordHash || !passwordMatch) throw new UnauthorizedException('Invalid credentials');
 
     return this.issueTokens(user.id, user.email);
   }

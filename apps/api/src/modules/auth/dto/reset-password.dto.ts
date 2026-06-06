@@ -2,9 +2,11 @@ import { IsString, MaxLength, MinLength, Matches } from 'class-validator';
 
 export class ResetPasswordDto {
   @IsString()
+  @MaxLength(512)
   token!: string;
 
   @IsString()
+  @MaxLength(36)
   recordId!: string;
 
   @IsString()

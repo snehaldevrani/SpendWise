@@ -41,7 +41,8 @@ export class TransactionsController {
 
   @Get('daily-spend')
   getDailySpend(@CurrentUser() user: AuthUser, @Query('days') days?: string) {
-    return this.transactionsService.getDailySpend(user.id, days ? parseInt(days) : 60);
+    const safeDays = Math.min(Math.max(parseInt(days ?? '60', 10) || 60, 1), 365);
+    return this.transactionsService.getDailySpend(user.id, safeDays);
   }
 
   @Get('summary/monthly')
@@ -50,7 +51,12 @@ export class TransactionsController {
     @Query('month') month: string,
     @Query('year') year: string,
   ) {
-    return this.transactionsService.getMonthlySummary(user.id, parseInt(month), parseInt(year));
+    const m = parseInt(month, 10);
+    const y = parseInt(year, 10);
+    if (!m || m < 1 || m > 12 || !y || y < 2000 || y > 2100) {
+      return { income: 0, expenses: 0, net: 0, transactions: [] };
+    }
+    return this.transactionsService.getMonthlySummary(user.id, m, y);
   }
 
   @Delete('all')
@@ -63,7 +69,8 @@ export class TransactionsController {
     @CurrentUser() user: AuthUser,
     @Query('months') months?: string,
   ) {
-    return this.transactionsService.getCategoryTrends(user.id, months ? parseInt(months, 10) : 6);
+    const safeMonths = Math.min(Math.max(parseInt(months ?? '6', 10) || 6, 1), 24);
+    return this.transactionsService.getCategoryTrends(user.id, safeMonths);
   }
 
   /**
@@ -76,9 +83,20 @@ export class TransactionsController {
     @Query('start') start: string,
     @Query('end') end: string,
   ) {
+    const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+    if (!start || !end || !ISO_DATE.test(start) || !ISO_DATE.test(end)) {
+      return { income: 0, expenses: 0, transactions: [] };
+    }
     const startDate = new Date(start);
     const endDate = new Date(end);
-    // Set end to 23:59:59 so the full last day is included
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime()) || startDate > endDate) {
+      return { income: 0, expenses: 0, transactions: [] };
+    }
+    // Cap range to 2 years to prevent full-table scan
+    const MAX_RANGE_MS = 2 * 365 * 24 * 60 * 60 * 1000;
+    if (endDate.getTime() - startDate.getTime() > MAX_RANGE_MS) {
+      return { income: 0, expenses: 0, transactions: [] };
+    }
     endDate.setHours(23, 59, 59, 999);
     return this.transactionsService.getRangeOverview(user.id, startDate, endDate);
   }
