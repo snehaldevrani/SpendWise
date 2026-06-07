@@ -32,7 +32,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { api } from "@/lib/api";
-import type { OverviewData, DailySpend, Transaction, Subscription, AiRecommendation, RangeOverview } from "@/lib/api";
+import type { OverviewData, DailySpend, Transaction, Subscription, AiRecommendation, RangeOverview, CustomCategoryDto } from "@/lib/api";
 import { useAuthStore, useUIStore } from "@/store";
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -133,6 +133,11 @@ export default function DashboardPage() {
     enabled: rangePreset !== 'month' && !!overview.data,
   });
 
+  const { data: customCats = [] } = useQuery<CustomCategoryDto[]>({
+    queryKey: ["custom-categories"],
+    queryFn: () => api.get<CustomCategoryDto[]>("/custom-categories").then((r) => r.data),
+  });
+
   if (!overview.isLoading && overview.data === null) {
     return (
       <div className="max-w-7xl mx-auto">
@@ -154,10 +159,14 @@ export default function DashboardPage() {
     (acc, s) => acc + (Number(s.avgAmount) * 30) / s.estimatedCycleDays, 0
   ) ?? 0;
 
+  const allCategoryLabels = { ...CATEGORY_LABELS, ...Object.fromEntries(customCats.map((c) => [c.slug, c.name])) };
+  const allCategoryColors = { ...CATEGORY_COLORS, ...Object.fromEntries(customCats.map((c) => [c.slug, c.color ?? "#6b7280"])) };
+  const allCategoryEmoji = { ...CATEGORY_EMOJI, ...Object.fromEntries(customCats.map((c) => [c.slug, c.emoji ?? "🏷️"])) };
+
   const categoryData = current?.breakdown?.map((b) => ({
-    name: CATEGORY_LABELS[b.category] ?? b.category,
+    name: allCategoryLabels[b.category] ?? b.category,
     value: Math.round(b.total),
-    color: CATEGORY_COLORS[b.category] ?? "#6b7280",
+    color: allCategoryColors[b.category] ?? "#6b7280",
   })) ?? [];
 
   const spendingData = dailySpend.data?.map((d) => ({
@@ -356,7 +365,7 @@ export default function DashboardPage() {
                       <div>
                         <p className="text-white font-medium text-sm">{tx.merchant}</p>
                         <Badge variant="secondary" className="bg-zinc-800 text-zinc-400 text-xs mt-0.5">
-                          {CATEGORY_EMOJI[tx.category]} {CATEGORY_LABELS[tx.category] ?? tx.category}
+                          {allCategoryEmoji[tx.category]} {allCategoryLabels[tx.category] ?? tx.category}
                         </Badge>
                       </div>
                     </div>

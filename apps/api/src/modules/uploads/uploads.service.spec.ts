@@ -52,7 +52,8 @@ describe('UploadsService', () => {
       add: jest.fn().mockResolvedValue({}),
     } as unknown as jest.Mocked<Queue>;
 
-    service = new UploadsService(prisma, new CsvParserService(), cache, queue);
+    const customCategories = { applyRules: jest.fn().mockResolvedValue(undefined) } as never;
+    service = new UploadsService(prisma, new CsvParserService(), cache, customCategories, queue);
   });
 
   describe('importCsv — file type validation', () => {

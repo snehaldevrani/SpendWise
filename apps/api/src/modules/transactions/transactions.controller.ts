@@ -101,6 +101,11 @@ export class TransactionsController {
     return this.transactionsService.getRangeOverview(user.id, startDate, endDate);
   }
 
+  @Get('merchants')
+  getMerchants(@CurrentUser() user: AuthUser) {
+    return this.transactionsService.getDistinctMerchants(user.id);
+  }
+
   @Patch(':id/category')
   updateCategory(
     @CurrentUser() user: AuthUser,

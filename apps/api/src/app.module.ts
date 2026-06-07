@@ -16,6 +16,7 @@ import { AiModule } from './modules/ai/ai.module';
 import { RagModule } from './modules/rag/rag.module';
 import { AlertsModule } from './modules/alerts/alerts.module';
 import { BudgetsModule } from './modules/budgets/budgets.module';
+import { CustomCategoriesModule } from './modules/custom-categories/custom-categories.module';
 import { JobsModule } from './jobs/jobs.module';
 import { DigestModule } from './jobs/digest/digest.module';
 import { validate } from './common/config/env.validation';
@@ -44,6 +45,7 @@ import { validate } from './common/config/env.validation';
     RagModule,
     AlertsModule,
     BudgetsModule,
+    CustomCategoriesModule,
     JobsModule,
     DigestModule,
   ],

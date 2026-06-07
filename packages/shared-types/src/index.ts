@@ -22,16 +22,7 @@ export interface UserDto {
 // Transaction
 export type TransactionType = 'debit' | 'credit';
 
-export type TransactionCategory =
-  | 'food'
-  | 'travel'
-  | 'utilities'
-  | 'entertainment'
-  | 'health'
-  | 'shopping'
-  | 'subscriptions'
-  | 'income'
-  | 'other';
+export type TransactionCategory = string;
 
 export interface TransactionDto {
   id: string;
@@ -43,6 +34,19 @@ export interface TransactionDto {
   category: TransactionCategory;
   type: TransactionType;
   rawText: string;
+}
+
+// Custom Category
+export interface CustomCategoryDto {
+  id: string;
+  userId: string;
+  name: string;
+  slug: string;
+  merchants: string[];
+  emoji?: string | null;
+  color?: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // Subscription

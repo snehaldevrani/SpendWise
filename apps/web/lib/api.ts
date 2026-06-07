@@ -142,6 +142,18 @@ export interface BudgetSummary {
 
 export type CategoryTrendsRow = { month: string } & Record<string, number>;
 
+export interface CustomCategoryDto {
+  id: string;
+  userId: string;
+  name: string;
+  slug: string;
+  merchants: string[];
+  emoji?: string | null;
+  color?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface RangeOverview {
   totalDebit: number;
   totalIncome: number;

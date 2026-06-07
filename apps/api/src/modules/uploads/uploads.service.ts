@@ -5,6 +5,7 @@ import { CsvImportResult } from '@spendwise/shared-types';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CacheService } from '../../common/cache/cache.service';
 import { CsvParserService } from './csv-parser.service';
+import { CustomCategoriesService } from '../custom-categories/custom-categories.service';
 import {
   IMPORT_QUEUE,
   JOB_EMBED_TRANSACTIONS,
@@ -18,6 +19,7 @@ export class UploadsService {
     private prisma: PrismaService,
     private csvParser: CsvParserService,
     private cache: CacheService,
+    private customCategories: CustomCategoriesService,
     @InjectQueue(IMPORT_QUEUE) private importQueue: Queue,
   ) {}
 
@@ -68,6 +70,9 @@ export class UploadsService {
     }
 
     if (inserted > 0) {
+      // Apply user's custom category rules to newly imported transactions
+      await this.customCategories.applyRules(userId);
+
       // Bust AI recommendations cache — new data means stale insights
       await this.cache.del(`ai:recs:${userId}`);
 

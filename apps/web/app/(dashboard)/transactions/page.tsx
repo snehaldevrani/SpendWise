@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
-import type { TransactionsPage, Transaction } from "@/lib/api";
+import type { TransactionsPage, Transaction, CustomCategoryDto } from "@/lib/api";
 import { useUIStore } from "@/store";
 
 const CATEGORIES = [
@@ -59,6 +59,27 @@ export default function TransactionsPage() {
   const [category, setCategory] = useState("all");
   const [page, setPage] = useState(1);
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  const { data: customCats = [] } = useQuery<CustomCategoryDto[]>({
+    queryKey: ["custom-categories"],
+    queryFn: () => api.get<CustomCategoryDto[]>("/custom-categories").then((r) => r.data),
+  });
+
+  const customCatMap = new Map(customCats.map((c) => [c.slug, c]));
+
+  const allFilterCategories = [
+    ...CATEGORIES,
+    ...(customCats.length > 0
+      ? customCats.map((c) => ({ value: c.slug, label: `${c.emoji ?? "🏷️"} ${c.name}` }))
+      : []),
+  ];
+
+  const allEditCategories = [
+    ...CATEGORIES.filter((c) => c.value !== "all"),
+    ...(customCats.length > 0
+      ? customCats.map((c) => ({ value: c.slug, label: `${c.emoji ?? "🏷️"} ${c.name}` }))
+      : []),
+  ];
 
   const debouncedSearch = useDebounce(search, 300);
 
@@ -140,7 +161,7 @@ export default function TransactionsPage() {
                 <SelectValue placeholder="Category" />
               </SelectTrigger>
               <SelectContent className="bg-zinc-900 border-white/10">
-                {CATEGORIES.map((c) => (
+                {allFilterCategories.map((c) => (
                   <SelectItem key={c.value} value={c.value} className="text-white focus:bg-zinc-800 focus:text-white">{c.label}</SelectItem>
                 ))}
               </SelectContent>
@@ -215,19 +236,33 @@ export default function TransactionsPage() {
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent className="bg-zinc-900 border-white/10">
-                                {CATEGORIES.filter((c) => c.value !== "all").map((c) => (
+                                {allEditCategories.map((c) => (
                                   <SelectItem key={c.value} value={c.value} className="text-white text-xs focus:bg-zinc-800 focus:text-white">{c.label}</SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
-                          ) : (
-                            <Badge
-                              className={`cursor-pointer ${CAT_META[tx.category]?.color ?? "bg-zinc-500/20 text-zinc-400"}`}
-                              onClick={() => setEditingId(tx.id)}
-                            >
-                              {CAT_META[tx.category]?.emoji} {CAT_META[tx.category]?.label ?? tx.category}
-                            </Badge>
-                          )}
+                          ) : (() => {
+                            const custom = customCatMap.get(tx.category);
+                            if (custom) {
+                              return (
+                                <Badge
+                                  className="cursor-pointer text-white border-0"
+                                  style={{ backgroundColor: (custom.color ?? "#10b981") + "33", color: custom.color ?? "#10b981" }}
+                                  onClick={() => setEditingId(tx.id)}
+                                >
+                                  {custom.emoji ?? "🏷️"} {custom.name}
+                                </Badge>
+                              );
+                            }
+                            return (
+                              <Badge
+                                className={`cursor-pointer ${CAT_META[tx.category]?.color ?? "bg-zinc-500/20 text-zinc-400"}`}
+                                onClick={() => setEditingId(tx.id)}
+                              >
+                                {CAT_META[tx.category]?.emoji} {CAT_META[tx.category]?.label ?? tx.category}
+                              </Badge>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline" className={tx.type === "credit" ? "border-emerald-500/50 text-emerald-500" : "border-red-500/50 text-red-400"}>

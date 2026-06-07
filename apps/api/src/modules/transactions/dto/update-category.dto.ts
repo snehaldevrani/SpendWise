@@ -1,7 +1,8 @@
-import { IsEnum } from 'class-validator';
-import { TransactionCategory } from '@spendwise/shared-types';
+import { IsString, MaxLength, MinLength } from 'class-validator';
 
 export class UpdateCategoryDto {
-  @IsEnum(['food', 'travel', 'utilities', 'entertainment', 'health', 'shopping', 'subscriptions', 'income', 'other'])
-  category!: TransactionCategory;
+  @IsString()
+  @MinLength(1)
+  @MaxLength(50)
+  category!: string;
 }

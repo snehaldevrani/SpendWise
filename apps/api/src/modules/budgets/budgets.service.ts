@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { TransactionCategory } from '@spendwise/shared-types';
 
 @Injectable()
 export class BudgetsService {
@@ -78,7 +77,7 @@ export class BudgetsService {
 
   async upsertBudget(
     userId: string,
-    category: TransactionCategory,
+    category: string,
     limitAmount: number,
     month: number,
     year: number,

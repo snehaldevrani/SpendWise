@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { TransactionCategory } from '@spendwise/shared-types';
 import { PrismaService } from '../../common/prisma/prisma.service';
 
 @Injectable()
@@ -38,11 +37,21 @@ export class TransactionsService {
     return { total, page, limit, items };
   }
 
-  async updateCategory(userId: string, transactionId: string, category: TransactionCategory) {
+  async updateCategory(userId: string, transactionId: string, category: string) {
     return this.prisma.transaction.update({
       where: { id: transactionId, userId },
       data: { category },
     });
+  }
+
+  async getDistinctMerchants(userId: string): Promise<string[]> {
+    const rows = await this.prisma.transaction.findMany({
+      where: { userId },
+      select: { merchant: true },
+      distinct: ['merchant'],
+      orderBy: { merchant: 'asc' },
+    });
+    return rows.map((r) => r.merchant);
   }
 
   async getMonthlySummary(userId: string, month: number, year: number) {

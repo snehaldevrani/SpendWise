@@ -16,6 +16,7 @@ import {
   Upload,
   PiggyBank,
   BookOpen,
+  Tag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -28,6 +29,7 @@ const navItems = [
   { href: "/transactions", label: "Transactions", icon: CreditCard },
   { href: "/subscriptions", label: "Subscriptions", icon: RefreshCw },
   { href: "/budgets", label: "Budgets", icon: PiggyBank },
+  { href: "/categories", label: "Categories", icon: Tag },
   { href: "/insights", label: "Insights", icon: Lightbulb },
   { href: "/tutorial", label: "Tutorial", icon: BookOpen },
   { href: "/settings", label: "Settings", icon: Settings2 },
