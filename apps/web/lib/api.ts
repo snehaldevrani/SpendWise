@@ -38,7 +38,11 @@ api.interceptors.response.use(
         await refreshPromise;
         return api(original);
       } catch {
-        if (typeof window !== 'undefined') window.location.href = '/login';
+        if (typeof window !== 'undefined') {
+          const authPages = ['/login', '/signup', '/forgot-password', '/reset-password'];
+          const onAuthPage = authPages.some((p) => window.location.pathname.startsWith(p));
+          if (!onAuthPage) window.location.href = '/login';
+        }
       }
     }
     return Promise.reject(error);
