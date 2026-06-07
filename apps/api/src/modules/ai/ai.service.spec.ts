@@ -6,16 +6,15 @@ import { ServiceUnavailableException, HttpException } from '@nestjs/common';
 
 // Mock the Google Generative AI SDK so no real API calls are made
 const mockGenerateContent = jest.fn();
-const mockSendMessage = jest.fn();
 
 jest.mock('@google/generative-ai', () => {
   return {
     GoogleGenerativeAI: jest.fn().mockImplementation(() => ({
       getGenerativeModel: jest.fn().mockReturnValue({
         generateContent: mockGenerateContent,
-        startChat: jest.fn().mockReturnValue({ sendMessage: mockSendMessage }),
       }),
     })),
+    SchemaType: { OBJECT: 'OBJECT', STRING: 'STRING', NUMBER: 'NUMBER', BOOLEAN: 'BOOLEAN', ARRAY: 'ARRAY' },
   };
 });
 
@@ -47,11 +46,12 @@ describe('AiService', () => {
     } as unknown as jest.Mocked<CacheService>;
 
     const config = { get: jest.fn().mockReturnValue('test-api-key') } as unknown as ConfigService;
+    const customCategories = { list: jest.fn().mockResolvedValue([]), create: jest.fn(), update: jest.fn(), delete: jest.fn() } as never;
+    const budgets = { upsertBudget: jest.fn(), deleteBudget: jest.fn() } as never;
 
     mockGenerateContent.mockReset();
-    mockSendMessage.mockReset();
 
-    service = new AiService(prisma, config, cache);
+    service = new AiService(prisma, config, cache, customCategories, budgets);
   });
 
   describe('getRecommendations', () => {
@@ -106,6 +106,8 @@ describe('AiService', () => {
   });
 
   describe('chat', () => {
+    const noFunctionCalls = () => undefined;
+
     it('throws 429 when chat rate limit is exceeded', async () => {
       (cache.incr as jest.Mock).mockResolvedValue(21); // over 20/day limit
 
@@ -114,38 +116,41 @@ describe('AiService', () => {
       );
     });
 
-    it('returns the AI answer string', async () => {
-      mockSendMessage.mockResolvedValue({
-        response: { text: () => 'Your top expense is food (₹5,200).' },
+    it('returns the AI answer and empty actionsPerformed on plain text response', async () => {
+      mockGenerateContent.mockResolvedValue({
+        response: { text: () => 'Your top expense is food (₹5,200).', functionCalls: noFunctionCalls },
       });
 
-      const answer = await service.chat('user-1', 'Top expense?', ['txn: food 500']);
+      const result = await service.chat('user-1', 'Top expense?', ['txn: food 500']);
 
-      expect(answer).toBe('Your top expense is food (₹5,200).');
+      expect(result.answer).toBe('Your top expense is food (₹5,200).');
+      expect(result.actionsPerformed).toEqual([]);
     });
 
-    it('includes context chunks in the prompt', async () => {
-      mockSendMessage.mockResolvedValue({
-        response: { text: () => 'Based on your data...' },
+    it('includes context chunks in the first-turn prompt', async () => {
+      mockGenerateContent.mockResolvedValue({
+        response: { text: () => 'Based on your data...', functionCalls: noFunctionCalls },
       });
 
       await service.chat('user-1', 'What did I spend on food?', ['txn: Swiggy 350', 'txn: Zomato 200']);
 
-      const callArg: string = mockSendMessage.mock.calls[0][0];
-      expect(callArg).toContain('Swiggy');
-      expect(callArg).toContain('Zomato');
+      const callArg = mockGenerateContent.mock.calls[0][0] as { contents: Array<{ parts: Array<{ text: string }> }> };
+      const firstUserText = callArg.contents[callArg.contents.length - 1].parts[0].text;
+      expect(firstUserText).toContain('Swiggy');
+      expect(firstUserText).toContain('Zomato');
     });
 
     it('sends the question without context when no chunks provided', async () => {
-      mockSendMessage.mockResolvedValue({
-        response: { text: () => 'Not enough data.' },
+      mockGenerateContent.mockResolvedValue({
+        response: { text: () => 'Not enough data.', functionCalls: noFunctionCalls },
       });
 
       await service.chat('user-1', 'Any subscriptions?', []);
 
-      const callArg: string = mockSendMessage.mock.calls[0][0];
-      expect(callArg).not.toContain('Additional semantic matches');
-      expect(callArg).toContain('Any subscriptions?');
+      const callArg = mockGenerateContent.mock.calls[0][0] as { contents: Array<{ parts: Array<{ text: string }> }> };
+      const firstUserText = callArg.contents[callArg.contents.length - 1].parts[0].text;
+      expect(firstUserText).not.toContain('Additional semantic matches');
+      expect(firstUserText).toContain('Any subscriptions?');
     });
 
     it('strips UPI reference IDs from merchant names before sending to Gemini', async () => {
@@ -166,21 +171,20 @@ describe('AiService', () => {
         },
       ]);
 
-      mockSendMessage.mockResolvedValue({
-        response: { text: () => 'Your top expense is food.' },
+      mockGenerateContent.mockResolvedValue({
+        response: { text: () => 'Your top expense is food.', functionCalls: noFunctionCalls },
       });
 
       await service.chat('user-1', 'What did I spend on food?', []);
 
-      const callArg: string = mockSendMessage.mock.calls[0][0];
-      // Brand names should be present
-      expect(callArg).toContain('Zomato');
-      expect(callArg).toContain('Himanshi');
-      // Raw UPI reference IDs must NOT be sent to Gemini
-      expect(callArg).not.toContain('013914520250');
-      expect(callArg).not.toContain('609779342132');
-      expect(callArg).not.toContain('UPIAR/');
-      expect(callArg).not.toContain('UPIAB/');
+      const callArg = mockGenerateContent.mock.calls[0][0] as { contents: Array<{ parts: Array<{ text: string }> }> };
+      const firstUserText = callArg.contents[callArg.contents.length - 1].parts[0].text;
+      expect(firstUserText).toContain('Zomato');
+      expect(firstUserText).toContain('Himanshi');
+      expect(firstUserText).not.toContain('013914520250');
+      expect(firstUserText).not.toContain('609779342132');
+      expect(firstUserText).not.toContain('UPIAR/');
+      expect(firstUserText).not.toContain('UPIAB/');
     });
   });
 });

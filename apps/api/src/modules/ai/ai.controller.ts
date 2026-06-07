@@ -25,7 +25,7 @@ export class AiController {
   @Throttle({ default: { limit: 30, ttl: 60_000 } })
   async chat(@CurrentUser() user: AuthUser, @Body() dto: ChatDto) {
     const chunks = await this.ragService.search(user.id, dto.question);
-    const answer = await this.aiService.chat(user.id, dto.question, chunks, dto.history ?? []);
-    return { answer, sourcesUsed: chunks.length };
+    const { answer, actionsPerformed } = await this.aiService.chat(user.id, dto.question, chunks, dto.history ?? []);
+    return { answer, sourcesUsed: chunks.length, actionsPerformed };
   }
 }

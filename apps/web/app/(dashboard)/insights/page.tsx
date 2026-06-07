@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Send, Sparkles, Lightbulb, Upload, BarChart3 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -40,6 +40,7 @@ const SUGGESTED = [
 ];
 
 export default function InsightsPage() {
+  const qc = useQueryClient();
   const { setUploadDialog } = useUIStore();
   const { messages, addMessage } = useChatStore();
   const [input, setInput] = useState("");
@@ -77,8 +78,17 @@ export default function InsightsPage() {
         .filter((m) => m.id !== 0 && m.id !== userMsg.id)
         .map((m) => ({ role: m.role === "assistant" ? "model" : "user" as "user" | "model", parts: m.content }));
 
-      const res = await api.post<{ answer: string; sourcesUsed: number }>("/ai/chat", { question, history });
-      addMessage({ id: Date.now() + 1, role: "assistant", content: res.data.answer });
+      const res = await api.post<{ answer: string; sourcesUsed: number; actionsPerformed?: string[] }>("/ai/chat", { question, history });
+      const { answer, actionsPerformed = [] } = res.data;
+      addMessage({ id: Date.now() + 1, role: "assistant", content: answer, actionsPerformed });
+      if (actionsPerformed.some((a) => a.includes("category"))) {
+        qc.invalidateQueries({ queryKey: ["custom-categories"] });
+        qc.invalidateQueries({ queryKey: ["transactions"] });
+        qc.invalidateQueries({ queryKey: ["overview"] });
+      }
+      if (actionsPerformed.some((a) => a.includes("budget"))) {
+        qc.invalidateQueries({ queryKey: ["budgets"] });
+      }
     } catch {
       addMessage({ id: Date.now() + 1, role: "assistant", content: "Sorry, I couldn't answer that right now. Please try again." });
     } finally {
@@ -114,8 +124,15 @@ export default function InsightsPage() {
                     <AvatarFallback className="bg-emerald-500/20 text-emerald-500 text-xs">SW</AvatarFallback>
                   </Avatar>
                 )}
-                <div className={cn("max-w-[80%] rounded-2xl px-4 py-3 text-sm whitespace-pre-wrap", m.role === "assistant" ? "bg-zinc-800 text-white" : "bg-slate-700 text-white ml-auto")}>
-                  {m.content}
+                <div className="max-w-[80%] flex flex-col gap-1">
+                  <div className={cn("rounded-2xl px-4 py-3 text-sm whitespace-pre-wrap", m.role === "assistant" ? "bg-zinc-800 text-white" : "bg-slate-700 text-white ml-auto")}>
+                    {m.content}
+                  </div>
+                  {m.actionsPerformed && m.actionsPerformed.length > 0 && (
+                    <span className="text-xs text-emerald-400 px-1">
+                      ✓ {m.actionsPerformed.length} action{m.actionsPerformed.length > 1 ? "s" : ""} saved
+                    </span>
+                  )}
                 </div>
               </div>
             ))}

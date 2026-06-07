@@ -9,6 +9,7 @@ export interface ChatMessage {
   id: number;
   role: 'user' | 'assistant';
   content: string;
+  actionsPerformed?: string[];
 }
 
 const GREETING: ChatMessage = {
