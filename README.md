@@ -18,13 +18,15 @@ Upload your bank statement once. SpendWise automatically categorises every trans
 |---------|---------|
 | **Multi-bank statement import** | HDFC, ICICI, SBI, Axis Bank, Kotak — CSV, XLSX (.xlsx only), and PDF formats; automatic column alias normalisation, magic-byte validation, deduplication |
 | **Real-time import progress** | After upload, an SSE stream (`GET /uploads/progress`) polls BullMQ job states every 1.5 s; upload dialog shows three live step indicators (embed → subscriptions → insights) updating in real time |
-| **Smart categorisation** | 9 categories (Food, Travel, Utilities, Entertainment, Health, Shopping, Subscriptions, Income, Other) — keyword-based auto-classify, inline editing |
+| **Smart categorisation** | 9 built-in categories (Food, Travel, Utilities, Entertainment, Health, Shopping, Subscriptions, Income, Other) — keyword-based auto-classify, inline editing |
+| **User-defined custom categories** | Create unlimited named categories with emoji, colour, and merchant keyword rules; rules auto-apply on every new upload and retroactively re-categorise existing transactions; merchant list sourced from `GET /transactions/merchants` |
 | **Subscription leak detection** | Confidence-scored recurring charge detection across 6 billing cycles (7/14/30/90/180/365 days); flags unused subscriptions with annual cost |
 | **Monthly & recurring budgets** | Per-category budgets with a Recurring toggle — one recurring budget auto-applies every month; explicit month budgets override recurring for that month; live progress bars, prorated forecast, health score |
 | **Dashboard date range** | Dropdown to view stat cards across This month / Last 2 months / Last 3 months / Last 6 months — aggregates Money Out / Money In / Net Savings over the selected window |
 | **6-month category trends** | Stacked bar chart showing month-by-month spend across all categories |
 | **Weekly spending summaries** | ISO-week groupings with total spend, income, category breakdown, top merchants |
 | **RAG AI chat** | Ask questions about your own finances; Gemini `gemini-embedding-2` embeddings + pgvector cosine search provides supplemental context; full transaction history injected into every prompt for factually accurate answers; chat history persisted in sessionStorage within the tab session |
+| **Agentic AI actions** | The AI chat can execute real actions on request — create, update, and delete categories and budgets — powered by Gemini function calling (5 declared tools: `create_category`, `update_category`, `delete_category`, `create_budget`, `delete_budget`); confirmed actions shown with a green pill; React Query caches invalidated automatically |
 | **AI recommendations** | Structured savings recommendations: top leaks, estimated monthly savings, action checklist — Redis-cached 6h, per-user rate limited |
 | **Weekly email digest** | Every Monday: last week's spend, income, net savings, top categories and merchants — opt-in via Settings |
 | **Email alerts** | New subscription leak detected → immediate notification |
@@ -100,7 +102,8 @@ SpendWise/
 │   │   │   │   ├── subscriptions/  Recurring charge detection + dismiss/confirm
 │   │   │   │   ├── budgets/        Monthly budget CRUD, forecast, health score
 │   │   │   │   ├── insights/       ISO-week summaries, category trends
-│   │   │   │   ├── ai/             Gemini 2.5 Flash recs + RAG chat, rate limits
+│   │   │   │   ├── ai/             Gemini 2.5 Flash recs + RAG chat + function calling, rate limits
+│   │   │   │   ├── custom-categories/ User-defined category rules (CRUD + applyRules)
 │   │   │   │   ├── rag/            Gemini embedding-2 (768-dim), pgvector search
 │   │   │   │   └── alerts/         Resend email alerts
 │   │   │   ├── jobs/
@@ -121,7 +124,8 @@ SpendWise/
 │       │       ├── transactions/   Table, search, filters, CSV export, inline edit
 │       │       ├── subscriptions/  Leak cards, dismiss/confirm
 │       │       ├── budgets/        Budget CRUD (monthly + recurring), progress bars, forecast
-│       │       ├── insights/       AI chat (persisted), weekly cards, 6-month trends chart
+│       │       ├── categories/     Custom category CRUD — name, emoji, colour, merchant rules
+│       │       ├── insights/       AI chat (persisted + agentic), weekly cards, 6-month trends chart
 │       │       └── settings/       Notification preferences
 │       ├── components/             shadcn/ui + custom layout components
 │       ├── store/                  Zustand: auth, UI state
@@ -409,6 +413,8 @@ Key endpoints:
 | `GET` | `/api/uploads/progress` | SSE stream — real-time BullMQ job status (`?jobs=id1,id2,id3`) |
 | `GET` | `/api/transactions` | List with pagination, search, filters |
 | `PATCH` | `/api/transactions/:id/category` | Edit transaction category |
+| `PATCH` | `/api/transactions/bulk-category` | Bulk re-categorise by merchant (used by custom category rules) |
+| `GET` | `/api/transactions/merchants` | Unique merchant list — powers the category rule builder |
 | `GET` | `/api/transactions/overview` | Dashboard stat cards (current vs previous month) |
 | `GET` | `/api/transactions/range-overview` | Aggregated stats across arbitrary date window (`?start=&end=`) |
 | `GET` | `/api/transactions/category-trends` | 6-month stacked spend data |
@@ -418,8 +424,12 @@ Key endpoints:
 | `POST` | `/api/budgets` | Create or update a budget (`recurring: true` for all-months) |
 | `DELETE` | `/api/budgets/:id` | Remove a budget |
 | `GET` | `/api/insights` | Weekly insight cards |
+| `GET` | `/api/custom-categories` | List user-defined categories |
+| `POST` | `/api/custom-categories` | Create category (name, emoji, colour, merchants[]) |
+| `PATCH` | `/api/custom-categories/:id` | Update category |
+| `DELETE` | `/api/custom-categories/:id` | Delete category |
 | `GET` | `/api/ai/recommendations` | Gemini 2.5 Flash savings advice (cached 6h, rate-limited 4/day) |
-| `POST` | `/api/ai/chat` | RAG-augmented AI chat (accepts `history[]` for multi-turn) |
+| `POST` | `/api/ai/chat` | RAG-augmented AI chat with Gemini function calling — returns `actionsPerformed[]` |
 | `GET` | `/api/users/preferences` | Notification settings |
 | `PATCH` | `/api/users/preferences` | Update notification settings |
 | `POST` | `/api/auth/forgot-password` | Send password reset email (public, 3/hour) |
@@ -504,6 +514,6 @@ The API container runs `prisma migrate deploy` automatically on every startup, s
 | `subscription-detector.service.spec.ts` | Weekly/monthly/annual detection, confidence scoring, edge cases |
 | `insights.service.spec.ts` | ISO week grouping, category aggregation, credit exclusion, merchant ranking |
 | `transactions.controller.spec.ts` | Pagination, search clamping, userId guard, filter pass-through |
-| `ai.service.spec.ts` | Cache hit, rate limiting, Gemini mock, context injection, malformed response handling |
+| `ai.service.spec.ts` | Cache hit, rate limiting, Gemini mock, context injection, malformed response handling, function calling actions, UPI sanitisation |
 | `uploads.service.spec.ts` | Magic byte validation, full import flow, duplicate skipping, job enqueueing, cache busting |
 
