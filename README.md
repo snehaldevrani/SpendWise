@@ -4,7 +4,7 @@
 
 Upload your bank statement once. SpendWise automatically categorises every transaction, detects recurring subscription charges, computes weekly spending summaries, lets you set monthly budgets, and gives you an AI assistant that answers questions grounded in your *own* transaction history — not generic advice.
 
-> Built with NestJS · Next.js 15 · PostgreSQL + pgvector · Redis · Google Gemini 2.5 Flash
+> Built with NestJS · Next.js 15 · PostgreSQL + pgvector · Redis · Google Gemini 3.1 Flash Lite
 
 **Live demo:** [spendwise-web-nine.vercel.app](https://spendwise-web-nine.vercel.app) &nbsp;|&nbsp; **API:** [spendwise-api-q01j.onrender.com/api/docs](https://spendwise-api-q01j.onrender.com/api/docs)
 
@@ -25,7 +25,7 @@ Upload your bank statement once. SpendWise automatically categorises every trans
 | **Dashboard date range** | Dropdown to view stat cards across This month / Last 2 months / Last 3 months / Last 6 months — aggregates Money Out / Money In / Net Savings over the selected window |
 | **6-month category trends** | Stacked bar chart showing month-by-month spend across all categories |
 | **Weekly spending summaries** | ISO-week groupings with total spend, income, category breakdown, top merchants |
-| **RAG AI chat** | Ask questions about your own finances; Gemini `gemini-embedding-2` embeddings + pgvector cosine search provides supplemental context; full transaction history injected into every prompt for factually accurate answers; chat history persisted in sessionStorage within the tab session |
+| **RAG AI chat** | Ask questions about your own finances; Gemini `gemini-embedding-2` embeddings + pgvector cosine search provides supplemental context; full transaction history injected into every prompt for factually accurate answers; chat history persisted in localStorage across refreshes and sessions |
 | **Agentic AI actions** | The AI chat can execute real actions on request — create, update, and delete categories and budgets — powered by Gemini function calling (5 declared tools: `create_category`, `update_category`, `delete_category`, `create_budget`, `delete_budget`); confirmed actions shown with a green pill; React Query caches invalidated automatically |
 | **AI recommendations** | Structured savings recommendations: top leaks, estimated monthly savings, action checklist — Redis-cached 6h, per-user rate limited |
 | **Weekly email digest** | Every Monday: last week's spend, income, net savings, top categories and merchants — opt-in via Settings |
@@ -46,7 +46,7 @@ Upload your bank statement once. SpendWise automatically categorises every trans
 | Database | PostgreSQL 16 + pgvector (768-dim, HNSW index) |
 | ORM | Prisma 5 |
 | Cache / Queue | Redis 7 + BullMQ 5 |
-| AI — chat & recs | Google Gemini `gemini-2.5-flash` (Google Generative AI SDK) |
+| AI — chat & recs | Google Gemini `gemini-3.1-flash-lite` (Google Generative AI SDK) |
 | AI — embeddings | Google Gemini `gemini-embedding-2` (768 dims, matryoshka truncation) |
 | Email | Resend |
 | State | TanStack Query 5, Zustand 5 |
@@ -69,13 +69,13 @@ SpendWise originally shipped with **Claude Sonnet 4.6** (Anthropic) for chat and
 
 Cost. Running Claude Sonnet 4.6 at even moderate traffic is expensive — Anthropic charges per input/output token with no free tier. Voyage AI similarly has no meaningful free tier. For a personal project or early-stage product, this was unsustainable.
 
-Google Gemini provides a **generous free tier** via Google AI Studio (`gemini-2.5-flash` and `gemini-embedding-2` are both available on the free plan), which made the switch an easy cost-cutting decision without compromising capability.
+Google Gemini provides a **generous free tier** via Google AI Studio (`gemini-3.1-flash-lite` and `gemini-embedding-2` are both available on the free plan), which made the switch an easy cost-cutting decision without compromising capability.
 
 **What changed:**
 
 | Component | Before | After |
 |-----------|--------|-------|
-| Chat / Recommendations | Claude Sonnet 4.6 (Anthropic SDK) | `gemini-2.5-flash` (Google Generative AI SDK) |
+| Chat / Recommendations | Claude Sonnet 4.6 (Anthropic SDK) | `gemini-3.1-flash-lite` (Google Generative AI SDK) |
 | Embeddings | Voyage AI `voyage-3-lite` (512-dim) | `gemini-embedding-2` with `outputDimensionality: 768` |
 | API key env var | `ANTHROPIC_API_KEY` + `VOYAGE_API_KEY` | `GEMINI_API_KEY` (single key) |
 | DB vector column | `vector(512)` | `vector(768)` |
@@ -102,7 +102,7 @@ SpendWise/
 │   │   │   │   ├── subscriptions/  Recurring charge detection + dismiss/confirm
 │   │   │   │   ├── budgets/        Monthly budget CRUD, forecast, health score
 │   │   │   │   ├── insights/       ISO-week summaries, category trends
-│   │   │   │   ├── ai/             Gemini 2.5 Flash recs + RAG chat + function calling, rate limits
+│   │   │   │   ├── ai/             Gemini 3.1 Flash Lite recs + RAG chat + function calling, rate limits
 │   │   │   │   ├── custom-categories/ User-defined category rules (CRUD + applyRules)
 │   │   │   │   ├── rag/            Gemini embedding-2 (768-dim), pgvector search
 │   │   │   │   └── alerts/         Resend email alerts
@@ -170,7 +170,7 @@ DATABASE_URL="postgresql://user:password@localhost:5432/spendwise?schema=public"
 REDIS_URL="redis://localhost:6379"
 JWT_SECRET="<min 32 chars>"
 JWT_REFRESH_SECRET="<min 32 chars>"
-GEMINI_API_KEY="AIzaSy..."          # from aistudio.google.com/apikey — starts with AIzaSy
+GEMINI_API_KEY="AQ..."              # from aistudio.google.com/apikey — free tier keys start with AQ.
 RESEND_API_KEY="re_..."             # from resend.com — required for password reset emails
 RESEND_FROM_EMAIL="onboarding@resend.dev"  # Resend's built-in test address, no domain verification needed
 FRONTEND_URL="http://localhost:3000"
@@ -347,6 +347,7 @@ Toggle email notifications:
 - **CSV/XLSX row + column + amount caps** — 10,000 row limit, 50 column limit, ₹1 billion amount cap; prevents DoS via oversized sheets
 - **Password reset O(1) lookup** — reset URL now includes `?id=<recordId>` for direct DB lookup; eliminates O(N) bcrypt scan across all active tokens
 - **AI prompt injection hardening** — merchant names sanitized (`sanitizeForPrompt`: strip `\r\n\x00`, truncate to 100 chars); user chat question stripped of control characters before `sendMessage` to prevent delimiter-escape attacks; system instruction anti-injection framing; `--- BEGIN/END TRANSACTION DATA ---` and `--- USER QUESTION ---` delimiters in every Gemini call
+- **Duplicate category guard** — `CustomCategoriesService.create()` checks for an existing `(userId, slug)` pair before the `prisma.customCategory.create()` call and throws a `ConflictException` (409); without this, Prisma's `@@unique([userId, slug])` constraint violation surfaced as an unhandled 500
 - **Frontend error message whitelisting** — raw server error strings in upload toasts, password-change toasts, and AI chat replaced with keyword-whitelisted or static fallbacks; prevents internal error details leaking to the UI
 - **Redis TLS cert validation configurable** — `rejectUnauthorized` controlled by `REDIS_TLS_REJECT_UNAUTHORIZED` env var; defaults to `true` in production; set to `'false'` only in dev
 - **Swagger UI hidden in production** — `SwaggerModule.setup()` only runs when `NODE_ENV !== 'production'`
@@ -354,7 +355,7 @@ Toggle email notifications:
 - **Google OAuth startup warning** — `GoogleStrategy` emits a `Logger.warn` at boot if `GOOGLE_CLIENT_ID` or `GOOGLE_CLIENT_SECRET` is missing; missing OAuth credentials surface immediately in logs rather than silently 500-ing at login time
 - **Privacy policy page** at `/privacy` — documents all data flows including what Gemini receives
 - **Constant-time login** — `bcrypt.compare` runs against a dummy hash even when the email doesn't exist; eliminates the ~100 ms vs ~1 ms timing oracle that would otherwise reveal valid email addresses via response time
-- **OAuth CSRF state parameter** — `passport-google-oauth20` configured with `state: true`; per-request nonce validated on callback to prevent CSRF login attacks
+- **Stateless Google OAuth** — `state: true` was intentionally removed from `GoogleStrategy`; the app uses JWT cookies (not sessions), so `express-session` is never set up — `state: true` requires session middleware and caused a 500 on every OAuth attempt by trying to write a nonce to `req.session` which was always `undefined`. Stateless OAuth is safe here because the callback URL itself validates that Google is calling back to our registered server.
 - **RAG UPDATE scoped to user** — `UPDATE transactions SET embedding = ...` includes `AND user_id = $userId` guard; closes a defense-in-depth gap where the SELECT was already scoped but the UPDATE was not
 - **`@MaxLength` on email and token DTO fields** — `email` fields capped at 254 chars (RFC 5321 max); `refreshToken` at 1024 chars; `token` and `recordId` on reset-password capped at 512 / 36 chars; prevents long-string DoS via JWT verification and validator.js regex on public endpoints
 - **HTML escaping in email templates** — merchant names from CSV/PDF data are escaped (`&`, `<`, `>`, `"`, `'`) before insertion into Resend HTML email bodies; prevents XSS payloads in HTML-capable email clients
@@ -363,7 +364,7 @@ Toggle email notifications:
 - **Next.js security headers** — `headers()` export in `next.config.ts` sets `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy`, and a `Content-Security-Policy` (including `connect-src` scoped to the API origin) on every page response
 - **CORS explicit config** — `app.enableCors()` specifies exact `methods`, `allowedHeaders`, and `origin`; removes the default behaviour of reflecting any method or header from preflight requests
 - **GuestGuard server-side verification** — login/signup pages call `GET /users/me` before rendering; active sessions are redirected to dashboard without relying on stale Zustand state, eliminating redirect-loop scenarios after cookie expiry
-- **Zustand persisted to sessionStorage** — both `useChatStore` and `useAuthStore` use a custom sessionStorage adapter instead of localStorage; financial chat history and auth state are tab-scoped and cleared on tab close, preventing data leakage across browser sessions
+- **Zustand persisted to localStorage** — both `useChatStore` and `useAuthStore` use a custom `localStorage` adapter; chat history survives page refreshes and new tabs; financial data is still cleared explicitly on logout via `clearHistory()`, preventing data leakage between users on the same device
 - **PDF parser row ceiling** — `parsePdf()` now enforces the same `MAX_ROWS = 10,000` limit as CSV/XLSX parsers; previously the PDF path had no cap, allowing unbounded memory use via crafted large PDFs
 - **Production log level restriction** — NestJS app created with `logger: ['log', 'warn', 'error']` in production; `debug` and `verbose` levels (which can emit request bodies and token fragments) are only enabled in development
 
@@ -428,7 +429,7 @@ Key endpoints:
 | `POST` | `/api/custom-categories` | Create category (name, emoji, colour, merchants[]) |
 | `PATCH` | `/api/custom-categories/:id` | Update category |
 | `DELETE` | `/api/custom-categories/:id` | Delete category |
-| `GET` | `/api/ai/recommendations` | Gemini 2.5 Flash savings advice (cached 6h, rate-limited 4/day) |
+| `GET` | `/api/ai/recommendations` | Gemini 3.1 Flash Lite savings advice (cached 6h, rate-limited 4/day) |
 | `POST` | `/api/ai/chat` | RAG-augmented AI chat with Gemini function calling — returns `actionsPerformed[]` |
 | `GET` | `/api/users/preferences` | Notification settings |
 | `PATCH` | `/api/users/preferences` | Update notification settings |
@@ -473,7 +474,7 @@ JWT_SECRET=<32+ char random string>
 JWT_EXPIRES_IN=15m
 JWT_REFRESH_SECRET=<32+ char random string>
 JWT_REFRESH_EXPIRES_IN=7d
-GEMINI_API_KEY=<from aistudio.google.com/apikey — starts with AIzaSy>
+GEMINI_API_KEY=<from aistudio.google.com/apikey — free tier keys start with AQ.>
 RESEND_API_KEY=re_...
 RESEND_FROM_EMAIL=onboarding@resend.dev
 GOOGLE_CLIENT_ID=<OAuth 2.0 Client ID from console.cloud.google.com>
