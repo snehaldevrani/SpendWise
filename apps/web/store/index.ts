@@ -35,7 +35,7 @@ export const useChatStore = create<ChatState>()(
       name: 'chat-store',
       partialize: (s) => ({ messages: s.messages }),
       storage: typeof window !== 'undefined'
-        ? { getItem: (k) => sessionStorage.getItem(k), setItem: (k, v) => sessionStorage.setItem(k, v), removeItem: (k) => sessionStorage.removeItem(k) }
+        ? { getItem: (k) => localStorage.getItem(k), setItem: (k, v) => localStorage.setItem(k, v), removeItem: (k) => localStorage.removeItem(k) }
         : undefined,
     },
   ),
@@ -66,7 +66,7 @@ export const useAuthStore = create<AuthState>()(
       name: 'auth-store',
       partialize: (s) => ({ user: s.user }),
       storage: typeof window !== 'undefined'
-        ? { getItem: (k) => sessionStorage.getItem(k), setItem: (k, v) => sessionStorage.setItem(k, v), removeItem: (k) => sessionStorage.removeItem(k) }
+        ? { getItem: (k) => localStorage.getItem(k), setItem: (k, v) => localStorage.setItem(k, v), removeItem: (k) => localStorage.removeItem(k) }
         : undefined,
     },
   ),
