@@ -134,7 +134,7 @@ export class AiService {
     const stats = await this.buildUserStats(userId);
 
     const model = this.genAI.getGenerativeModel({
-      model: 'gemini-2.5-flash-lite',
+      model: 'gemini-3.1-flash-lite',
       systemInstruction: `You are a personal finance advisor. Analyze the user's spending data and return actionable insights.
 Rules:
 - Provide suggestions, not investment advice or guaranteed outcomes
@@ -261,7 +261,7 @@ ${txnLines}${ragContext}
     }
 
     const model = this.genAI.getGenerativeModel({
-      model: 'gemini-2.5-flash-lite',
+      model: 'gemini-3.1-flash-lite',
       systemInstruction: `You are SpendWise AI, a personal finance assistant. You have access to the user's complete transaction history.
 
 You can also TAKE ACTIONS on the user's account using the available tools:
