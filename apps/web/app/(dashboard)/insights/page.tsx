@@ -89,8 +89,15 @@ export default function InsightsPage() {
       if (actionsPerformed.some((a) => a.includes("budget"))) {
         qc.invalidateQueries({ queryKey: ["budgets"] });
       }
-    } catch {
-      addMessage({ id: Date.now() + 1, role: "assistant", content: "Sorry, I couldn't answer that right now. Please try again." });
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      const errorMsg =
+        status === 429
+          ? "The AI is rate-limited right now. Please wait a moment and try again."
+          : status === 503
+          ? "The AI service is temporarily unavailable. Please try again in a moment."
+          : "Sorry, I couldn't answer that right now. Please try again.";
+      addMessage({ id: Date.now() + 1, role: "assistant", content: errorMsg });
     } finally {
       setIsTyping(false);
     }

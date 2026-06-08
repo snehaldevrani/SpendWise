@@ -26,7 +26,7 @@ Upload your bank statement once. SpendWise automatically categorises every trans
 | **6-month category trends** | Stacked bar chart showing month-by-month spend across all categories |
 | **Weekly spending summaries** | ISO-week groupings with total spend, income, category breakdown, top merchants |
 | **RAG AI chat** | Ask questions about your own finances; Gemini `gemini-embedding-2` embeddings + pgvector cosine search provides supplemental context; full transaction history injected into every prompt for factually accurate answers; chat history persisted in localStorage across refreshes and sessions |
-| **Agentic AI actions** | The AI chat can execute real actions on request — create, update, and delete categories and budgets — powered by Gemini function calling (5 declared tools: `create_category`, `update_category`, `delete_category`, `create_budget`, `delete_budget`); confirmed actions shown with a green pill; React Query caches invalidated automatically |
+| **Agentic AI actions** | The AI chat can execute real actions on request — create, update, and delete categories and budgets — powered by Gemini function calling (5 declared tools: `create_category`, `update_category`, `delete_category`, `create_budget`, `delete_budget`); categories can be created with zero merchants (optional); confirmed actions shown with a green pill; React Query caches invalidated automatically |
 | **AI recommendations** | Structured savings recommendations: top leaks, estimated monthly savings, action checklist — Redis-cached 6h, per-user rate limited |
 | **Weekly email digest** | Every Monday: last week's spend, income, net savings, top categories and merchants — opt-in via Settings |
 | **Email alerts** | New subscription leak detected → immediate notification |
@@ -46,7 +46,7 @@ Upload your bank statement once. SpendWise automatically categorises every trans
 | Database | PostgreSQL 16 + pgvector (768-dim, HNSW index) |
 | ORM | Prisma 5 |
 | Cache / Queue | Redis 7 + BullMQ 5 |
-| AI — chat & recs | Google Gemini `gemini-3.1-flash-lite` (Google Generative AI SDK) |
+| AI — chat & recs | Google Gemini `gemini-3.1-flash-lite` → `gemini-3.5-flash` → `gemini-3-flash` (waterfall fallback on rate-limit) |
 | AI — embeddings | Google Gemini `gemini-embedding-2` (768 dims, matryoshka truncation) |
 | Email | Resend |
 | State | TanStack Query 5, Zustand 5 |
@@ -333,7 +333,7 @@ Toggle email notifications:
 - **Helmet** with a strict Content Security Policy (`script-src 'self'`, no inline scripts)
 - **File upload magic-byte validation** — XLSX/XLS/PDF files are rejected if content doesn't match expected binary signatures
 - **UPI reference ID sanitisation** — raw UPI transaction IDs (e.g. `UPIAR/013914520250/DR/`) are stripped from merchant names before any data is sent to the Gemini API, reducing financial PII exposure
-- **Per-user AI rate limits** — Redis counters with 24h TTL
+- **Per-user AI rate limits** — Redis counters with 24h TTL; when the Gemini free-tier quota is exhausted the service waterfalls through `gemini-3.1-flash-lite` → `gemini-3.5-flash` → `gemini-3-flash` before returning a 429 to the client; the frontend displays a specific "rate-limited" message instead of the generic error
 - **Redis-backed rate limiting** — `@nest-lab/throttler-storage-redis` ensures rate limit counters survive server restarts; auth endpoints throttled to 5/15 min, uploads to 10/hour, password reset to 3/hour
 - **Password reset via email** — single-use bcrypt-hashed token, 1-hour expiry; all sessions revoked on reset
 - **Google OAuth** — `passport-google-oauth20`; `prompt: 'select_account'` forces account picker on every sign-in; after Google's callback the API redirects to `/callback` (not directly to `/dashboard`) so the Next.js client can call `/users/me`, populate the Zustand auth store, and then navigate to `/dashboard`; `AuthGuard` always calls `/users/me` on every mount — no fast-path bypass — closing the stale-session window
@@ -348,6 +348,9 @@ Toggle email notifications:
 - **Password reset O(1) lookup** — reset URL now includes `?id=<recordId>` for direct DB lookup; eliminates O(N) bcrypt scan across all active tokens
 - **AI prompt injection hardening** — merchant names sanitized (`sanitizeForPrompt`: strip `\r\n\x00`, truncate to 100 chars); user chat question stripped of control characters before `sendMessage` to prevent delimiter-escape attacks; system instruction anti-injection framing; `--- BEGIN/END TRANSACTION DATA ---` and `--- USER QUESTION ---` delimiters in every Gemini call
 - **Duplicate category guard** — `CustomCategoriesService.create()` checks for an existing `(userId, slug)` pair before the `prisma.customCategory.create()` call and throws a `ConflictException` (409); without this, Prisma's `@@unique([userId, slug])` constraint violation surfaced as an unhandled 500
+- **`create_category` merchants optional** — removed `merchants` from the Gemini tool's `required` array; the model no longer invents merchants when the user explicitly says "no merchants"; `executeTool` defaults to `[]` when the arg is absent
+- **Safe response-text extraction** — `safeResponseText()` helper catches the SDK exception thrown when a Gemini follow-up response contains a function call instead of a text part, returning a sensible fallback string instead of a 500
+- **Nested function-call guard** — if the model issues a second function call in the follow-up turn (regression from the `required` bug above), the backend executes it, runs one more confirmation turn, and returns a clean text answer; actionsPerformed accumulates all executed tools
 - **Frontend error message whitelisting** — raw server error strings in upload toasts, password-change toasts, and AI chat replaced with keyword-whitelisted or static fallbacks; prevents internal error details leaking to the UI
 - **Redis TLS cert validation configurable** — `rejectUnauthorized` controlled by `REDIS_TLS_REJECT_UNAUTHORIZED` env var; defaults to `true` in production; set to `'false'` only in dev
 - **Swagger UI hidden in production** — `SwaggerModule.setup()` only runs when `NODE_ENV !== 'production'`
