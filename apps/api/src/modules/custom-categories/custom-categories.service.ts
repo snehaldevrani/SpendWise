@@ -29,15 +29,15 @@ export class CustomCategoriesService {
         userId,
         name: dto.name.trim(),
         slug,
-        merchants: dto.merchants,
+        merchants: dto.merchants ?? [],
         emoji: dto.emoji,
         color: dto.color,
       },
     });
 
-    if (dto.merchants.length > 0) {
+    if ((dto.merchants ?? []).length > 0) {
       await this.prisma.transaction.updateMany({
-        where: { userId, merchant: { in: dto.merchants } },
+        where: { userId, merchant: { in: dto.merchants! } },
         data: { category: slug },
       });
     }

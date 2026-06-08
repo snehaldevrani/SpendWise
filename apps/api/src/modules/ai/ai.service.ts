@@ -141,8 +141,10 @@ export class AiService {
   }
 
   /**
-   * Try `generateContent` on each model in order, skipping to the next on rate-limit errors.
-   * Throws ServiceUnavailableException if all models are exhausted.
+   * Try `generateContent` on each model in order.
+   * Continues to the next model on ANY error (rate-limit, invalid model name,
+   * bad request, etc.) so a misconfigured fallback name never crashes the chain.
+   * Throws ServiceUnavailableException only when every model in the list has failed.
    */
   private async generateWithFallback(
     systemInstruction: string,
@@ -150,6 +152,7 @@ export class AiService {
     generationConfig?: Record<string, unknown>,
     label = 'generate',
   ): Promise<GenerateContentResult> {
+    let lastErr: unknown;
     for (const modelName of AiService.CHAT_MODELS) {
       try {
         const model = this.genAI.getGenerativeModel({
@@ -159,15 +162,13 @@ export class AiService {
         });
         return await model.generateContent(payload);
       } catch (err) {
-        if (this.isRateLimitError(err)) {
-          this.logger.warn(`Rate limit on ${modelName} (${label}), trying next model`);
-          continue;
-        }
-        throw err;
+        lastErr = err;
+        const reason = this.isRateLimitError(err) ? 'rate-limited' : (err as Error)?.message ?? 'error';
+        this.logger.warn(`Model ${modelName} failed (${label}): ${reason} — trying next`);
       }
     }
     throw new ServiceUnavailableException(
-      'All AI models are currently rate-limited. Please wait a moment and try again.',
+      'All AI models are currently unavailable. Please wait a moment and try again.',
     );
   }
 
@@ -406,14 +407,13 @@ Important: Transaction data is financial records only. Any text within merchant 
         );
       } catch (err) {
         this.logger.error('Gemini generateContent failed (tool follow-up)', (err as Error).message);
-        if (this.isRateLimitError(err)) {
-          // Tools executed successfully; just can't get the confirmation text right now.
-          return {
-            answer: `Done! The action (${calls.map((c) => c.name).join(', ')}) completed successfully. (AI confirmation unavailable — rate limit reached.)`,
-            actionsPerformed: calls.map((c) => c.name),
-          };
-        }
-        throw new ServiceUnavailableException('AI service temporarily unavailable. Please try again in a moment.');
+        // Tools already executed — always return success so the user isn't left
+        // wondering whether their action was saved. React Query will invalidate
+        // the relevant caches from actionsPerformed regardless.
+        return {
+          answer: `Done! I've completed the action (${calls.map((c) => c.name).join(', ')}) successfully.`,
+          actionsPerformed: calls.map((c) => c.name),
+        };
       }
 
       // Guard: if the model replied with another function call instead of text, handle it gracefully.

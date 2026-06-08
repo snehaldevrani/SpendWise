@@ -6,9 +6,10 @@ export class CreateCustomCategoryDto {
   @MaxLength(50)
   name!: string;
 
+  @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  merchants!: string[];
+  merchants?: string[];
 
   @IsOptional()
   @IsString()
