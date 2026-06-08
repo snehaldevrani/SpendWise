@@ -89,15 +89,21 @@ export class RagService {
 
     const vectorLiteral = `[${queryEmbedding.join(',')}]`;
 
-    const results = await this.prisma.$queryRaw<
-      Array<{ merchant: string; category: string; amount: number; date: Date; type: string }>
-    >`
-      SELECT merchant, category, amount::float, date, type
-      FROM transactions
-      WHERE user_id = ${userId} AND embedding IS NOT NULL
-      ORDER BY embedding <=> ${vectorLiteral}::vector
-      LIMIT 8
-    `;
+    let results: Array<{ merchant: string; category: string; amount: number; date: Date; type: string }>;
+    try {
+      results = await this.prisma.$queryRaw<
+        Array<{ merchant: string; category: string; amount: number; date: Date; type: string }>
+      >`
+        SELECT merchant, category, amount::float, date, type
+        FROM transactions
+        WHERE user_id = ${userId} AND embedding IS NOT NULL
+        ORDER BY embedding <=> ${vectorLiteral}::vector
+        LIMIT 8
+      `;
+    } catch (err) {
+      this.logger.error('Failed to search embeddings', err);
+      return [];
+    }
 
     return results.map(
       (r) =>
