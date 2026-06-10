@@ -1,10 +1,10 @@
-import { IsEnum, IsNumber, IsInt, Min, Max, IsBoolean, IsOptional } from 'class-validator';
+import { IsString, IsNumber, IsInt, Min, Max, IsBoolean, IsOptional, MinLength, Matches } from 'class-validator';
 import { TransactionCategory } from '@spendwise/shared-types';
 
-const ALL_CATEGORIES = ['food', 'travel', 'utilities', 'entertainment', 'health', 'shopping', 'subscriptions', 'income', 'other'];
-
 export class UpsertBudgetDto {
-  @IsEnum(ALL_CATEGORIES)
+  @IsString()
+  @MinLength(1)
+  @Matches(/^[a-z0-9_-]+$/, { message: 'Category must contain only lowercase letters, numbers, underscores, and hyphens' })
   category!: TransactionCategory;
 
   @IsNumber()
