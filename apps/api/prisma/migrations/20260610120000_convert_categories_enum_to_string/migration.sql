@@ -22,5 +22,5 @@ ALTER TABLE "transactions" ALTER COLUMN "category" SET DEFAULT 'other';
 ALTER TABLE "transactions" ALTER COLUMN "category" SET NOT NULL;
 ALTER TABLE "budgets" ALTER COLUMN "category" SET NOT NULL;
 
--- Step 6: Drop the enum type since it's no longer used
-DROP TYPE "TransactionCategory";
+-- Step 6: Drop the enum type with CASCADE to remove dependencies
+DROP TYPE "TransactionCategory" CASCADE;
