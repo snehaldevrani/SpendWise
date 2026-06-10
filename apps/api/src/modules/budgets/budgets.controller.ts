@@ -3,12 +3,42 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { BudgetsService } from './budgets.service';
 import { UpsertBudgetDto } from './dto/upsert-budget.dto';
 import { CurrentUser, AuthUser } from '../auth/decorators/current-user.decorator';
+import { CustomCategoriesService } from '../custom-categories/custom-categories.service';
+import { PrismaService } from '../../common/prisma/prisma.service';
+
+const PREDEFINED_CATEGORIES = [
+  { slug: 'food', name: 'Food', emoji: '🍕', isCustom: false },
+  { slug: 'travel', name: 'Travel', emoji: '✈️', isCustom: false },
+  { slug: 'utilities', name: 'Utilities', emoji: '💡', isCustom: false },
+  { slug: 'entertainment', name: 'Entertainment', emoji: '🎬', isCustom: false },
+  { slug: 'health', name: 'Health', emoji: '🏥', isCustom: false },
+  { slug: 'shopping', name: 'Shopping', emoji: '🛍️', isCustom: false },
+  { slug: 'subscriptions', name: 'Subscriptions', emoji: '📦', isCustom: false },
+  { slug: 'income', name: 'Income', emoji: '💰', isCustom: false },
+  { slug: 'other', name: 'Other', emoji: '📌', isCustom: false },
+];
 
 @ApiTags('budgets')
 @ApiBearerAuth()
 @Controller('budgets')
 export class BudgetsController {
-  constructor(private budgetsService: BudgetsService) {}
+  constructor(
+    private budgetsService: BudgetsService,
+    private customCategories: CustomCategoriesService,
+    private prisma: PrismaService,
+  ) {}
+
+  @Get('categories/available')
+  async getAvailableCategories(@CurrentUser() user: AuthUser) {
+    const customCats = await this.customCategories.list(user.id);
+    const customCatObjects = customCats.map((c) => ({
+      slug: c.slug,
+      name: c.name,
+      emoji: c.emoji || '📁',
+      isCustom: true,
+    }));
+    return [...PREDEFINED_CATEGORIES, ...customCatObjects];
+  }
 
   @Get()
   getBudgets(
