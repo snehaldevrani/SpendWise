@@ -6,7 +6,7 @@ Upload your bank statement once. SpendWise automatically categorises every trans
 
 > Built with NestJS · Next.js 15 · PostgreSQL + pgvector · Redis · Google Gemini 3.1 Flash Lite
 
-**Live demo:** [spendwise-web-nine.vercel.app](https://spendwise-web-nine.vercel.app) &nbsp;|&nbsp; **API:** [spendwise-api-q01j.onrender.com/api/docs](https://spendwise-api-q01j.onrender.com/api/docs)
+**Live demo:** [spendwise-web-nine.vercel.app](https://spendwise-web-nine.vercel.app) &nbsp;|&nbsp; **API:** [spendwise-api-q01j.onrender.com/api](https://spendwise-api-q01j.onrender.com/api)
 
 > The Render free tier spins down after 15 min of inactivity — first request may take ~30 s.
 
@@ -159,7 +159,7 @@ npm install
 # API
 cp apps/api/.env.example apps/api/.env
 
-# Web (only one variable needed)
+# Web
 cp apps/web/.env.example apps/web/.env.local
 ```
 
@@ -197,8 +197,11 @@ cd ../..
 
 ### 4. Run in development
 
+Run the API and web app in separate terminals:
+
 ```bash
-npm run dev
+npm run dev:api
+npm run dev:web
 ```
 
 | Service | URL |
@@ -403,7 +406,7 @@ All jobs use 3-attempt exponential-backoff retry. The BullMQ worker runs as a **
 
 ## API Reference
 
-Full interactive docs available at `http://localhost:3001/api/docs` (Swagger UI).
+Full interactive docs are available in local development at `http://localhost:3001/api/docs` (Swagger UI). Swagger is disabled when `NODE_ENV=production`.
 
 Key endpoints:
 
@@ -464,7 +467,7 @@ The recommended zero-cost production stack:
 | Postgres | [Neon](https://neon.tech) | PostgreSQL 16 + pgvector | — |
 | Redis | [Upstash](https://upstash.com) | Redis 7 (`rediss://` TLS) | — |
 
-> **Note:** BullMQ job processors (`JOB_EMBED_TRANSACTIONS`, `JOB_DETECT_SUBSCRIPTIONS`, `JOB_COMPUTE_INSIGHTS`) run inside the API process — no separate worker service required. The `worker.ts` entry point exists for scale-out if needed.
+> **Note:** The API imports the BullMQ processors, so a single Render web service can process jobs for a free-tier demo. `docker-compose.yml` also includes a separate `worker` service to show the scale-out path for heavier uploads.
 
 > Render free tier spins down after 15 min of inactivity — first request may take ~30 s. Acceptable for portfolio/demo use.
 
@@ -509,7 +512,7 @@ The API container runs `prisma migrate deploy` automatically on every startup, s
 
 ---
 
-7 test suites · 94 tests · 100% pass rate
+7 test suites · 83 test cases · 100% pass rate in the current source test set
 
 | Suite | Coverage |
 |-------|---------|
