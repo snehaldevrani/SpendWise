@@ -1,6 +1,6 @@
 'use client';
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { createJSONStorage, persist } from 'zustand/middleware';
 import { api } from '@/lib/api';
 
 // ─── Chat ────────────────────────────────────────────────────────────────────
@@ -34,9 +34,7 @@ export const useChatStore = create<ChatState>()(
     {
       name: 'chat-store',
       partialize: (s) => ({ messages: s.messages }),
-      storage: typeof window !== 'undefined'
-        ? { getItem: (k) => localStorage.getItem(k), setItem: (k, v) => localStorage.setItem(k, v), removeItem: (k) => localStorage.removeItem(k) }
-        : undefined,
+      storage: createJSONStorage(() => localStorage),
     },
   ),
 );
@@ -65,9 +63,7 @@ export const useAuthStore = create<AuthState>()(
     {
       name: 'auth-store',
       partialize: (s) => ({ user: s.user }),
-      storage: typeof window !== 'undefined'
-        ? { getItem: (k) => localStorage.getItem(k), setItem: (k, v) => localStorage.setItem(k, v), removeItem: (k) => localStorage.removeItem(k) }
-        : undefined,
+      storage: createJSONStorage(() => localStorage),
     },
   ),
 );

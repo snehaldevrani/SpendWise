@@ -512,7 +512,7 @@ The API container runs `prisma migrate deploy` automatically on every startup, s
 
 ---
 
-7 test suites · 83 test cases · 100% pass rate in the current source test set
+7 test suites · 94 tests · 100% pass rate
 
 | Suite | Coverage |
 |-------|---------|

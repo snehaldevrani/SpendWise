@@ -36,6 +36,10 @@ describe('AiService', () => {
     prisma = {
       transaction: { findMany: jest.fn().mockResolvedValue([]) },
       subscription: { findMany: jest.fn().mockResolvedValue([]) },
+      budget: {
+        findMany: jest.fn().mockResolvedValue([]),
+        findFirst: jest.fn().mockResolvedValue(null),
+      },
     } as unknown as jest.Mocked<PrismaService>;
 
     cache = {
