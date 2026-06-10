@@ -50,7 +50,7 @@ export class UploadsController {
         if (STRICT_MIMETYPES.has(file.mimetype) || extOk) {
           cb(null, true);
         } else {
-          cb(new BadRequestException(`Unsupported file type. Supported formats: CSV, XLS, XLSX, PDF`), false);
+          cb(new BadRequestException(`Unsupported file type. Supported formats: CSV, XLSX, PDF`), false);
         }
       },
     }),

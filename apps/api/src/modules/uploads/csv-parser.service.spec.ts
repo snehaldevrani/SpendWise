@@ -1,5 +1,7 @@
 import { CsvParserService } from './csv-parser.service';
 import { BadRequestException } from '@nestjs/common';
+import * as fs from 'fs';
+import * as path from 'path';
 
 describe('CsvParserService', () => {
   let service: CsvParserService;
@@ -180,6 +182,57 @@ BADDATE,Netflix,abc,debit
       const csv = `transaction date,particulars,amount,type\n01/01/2025,SBI Bill Pay,2000,debit`;
       const result = await service.parse(toBuffer(csv));
       expect(result.rows[0].date).toBeDefined();
+    });
+  });
+
+  describe('PDF text parsing', () => {
+    it('parses HDFC-style multiline PDF transactions', () => {
+      const text = `
+Date Narration Chq./Ref.No. Value Dt Withdrawal Amt. Deposit Amt. Closing Balance
+30/01/26 NEFT CR-CITI0000006-EPAM SYSTEMS INDIA P CITIN26614770451 30/01/26 22,865.00 22,865.00
+VT LTD HYDE INR-SNEHAL-DEVRANI-CITIN2661
+4770451 SALARY FOR JAN26682852
+31/01/26 UPI-BRIJESH KUMAR SAHU-9652504473@IBL-S 0000117932545437 31/01/26 329.00 22,536.00
+BIN0010534-117932545437-UPI
+01/02/26 UPI-ZOMATO
+LIMITED-ZOMATOORDER1.GPAY@OKP
+0000117986540359 01/02/26 331.70 22,168.30
+AYAXIS-UTIB0000553-117986540359-UPI
+Page No .: 1
+MR SNEHAL DEVRANI
+Statement of account From : 01/12/2025 To : 31/05/2026
+`;
+
+      const result = service.parsePdfText(text);
+
+      expect(result.errors).toHaveLength(0);
+      expect(result.rows).toHaveLength(3);
+      expect(result.rows[0].type).toBe('credit');
+      expect(result.rows[0].amount).toBe(22865);
+      expect(result.rows[1].type).toBe('debit');
+      expect(result.rows[1].amount).toBe(329);
+      expect(result.rows[2].merchant).toContain('UPI-ZOMATO');
+      expect(result.rows[2].amount).toBe(331.7);
+    });
+  });
+
+  describe('sample upload fixtures', () => {
+    it.each([
+      'simple-sample.csv',
+      'hdfc-split-columns-sample.csv',
+      'bankstatementwizard-sample.csv',
+      'simple-sample.xlsx',
+    ])('parses %s', async (filename) => {
+      const fixturePath = path.resolve(
+        __dirname,
+        '../../../../../test-fixtures/sample-bank-statements',
+        filename,
+      );
+
+      const result = await service.parse(fs.readFileSync(fixturePath), filename);
+
+      expect(result.errors).toHaveLength(0);
+      expect(result.rows).toHaveLength(6);
     });
   });
 });

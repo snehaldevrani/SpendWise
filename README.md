@@ -334,7 +334,7 @@ Toggle email notifications:
 - Refresh tokens **hashed in the database** — a leaked DB row cannot be replayed
 - **Atomic refresh token rotation** — old token deleted and new token inserted in a single Prisma transaction
 - **Helmet** with a strict Content Security Policy (`script-src 'self'`, no inline scripts)
-- **File upload magic-byte validation** — XLSX/XLS/PDF files are rejected if content doesn't match expected binary signatures
+- **File upload magic-byte validation** — XLSX/PDF files are rejected if content doesn't match expected binary signatures
 - **UPI reference ID sanitisation** — raw UPI transaction IDs (e.g. `UPIAR/013914520250/DR/`) are stripped from merchant names before any data is sent to the Gemini API, reducing financial PII exposure
 - **Per-user AI rate limits** — Redis counters with 24h TTL; when the Gemini free-tier quota is exhausted the service waterfalls through `gemini-3.1-flash-lite` → `gemini-3.5-flash` → `gemini-3-flash` before returning a 429 to the client; the frontend displays a specific "rate-limited" message instead of the generic error
 - **Redis-backed rate limiting** — `@nest-lab/throttler-storage-redis` ensures rate limit counters survive server restarts; auth endpoints throttled to 5/15 min, uploads to 10/hour, password reset to 3/hour
@@ -512,7 +512,7 @@ The API container runs `prisma migrate deploy` automatically on every startup, s
 
 ---
 
-7 test suites · 94 tests · 100% pass rate
+7 test suites · 100 tests · 100% pass rate
 
 | Suite | Coverage |
 |-------|---------|

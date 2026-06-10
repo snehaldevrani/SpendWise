@@ -1,9 +1,9 @@
-import { UploadsService } from './uploads.service';
-import { CsvParserService } from './csv-parser.service';
-import { PrismaService } from '../../common/prisma/prisma.service';
-import { CacheService } from '../../common/cache/cache.service';
 import { BadRequestException } from '@nestjs/common';
 import { Queue } from 'bullmq';
+import { CacheService } from '../../common/cache/cache.service';
+import { PrismaService } from '../../common/prisma/prisma.service';
+import { CsvParserService } from './csv-parser.service';
+import { UploadsService } from './uploads.service';
 
 function makeFile(
   content: string,
@@ -56,7 +56,7 @@ describe('UploadsService', () => {
     service = new UploadsService(prisma, new CsvParserService(), cache, customCategories, queue);
   });
 
-  describe('importCsv — file type validation', () => {
+  describe('importCsv file type validation', () => {
     it('throws BadRequestException for truly unsupported file types (e.g. .json)', async () => {
       const jsonFile = makeFile('{"key":"val"}', 'bank.json', 'application/json');
 
@@ -80,20 +80,55 @@ describe('UploadsService', () => {
     });
   });
 
-  describe('importCsv — magic byte validation', () => {
+  describe('importCsv magic byte validation', () => {
     it('throws BadRequestException if .xlsx file does not have ZIP magic bytes', async () => {
-      // Fake xlsx: wrong magic bytes (just plain text)
       const fakeXlsx = makeFile('PK fake content', 'bank.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      // Overwrite buffer with non-ZIP bytes
       fakeXlsx.buffer = Buffer.from([0x00, 0x01, 0x02, 0x03]);
 
       await expect(service.importCsv('u1', fakeXlsx)).rejects.toThrow(BadRequestException);
       await expect(service.importCsv('u1', fakeXlsx)).rejects.toThrow('XLSX format');
     });
-
   });
 
-  describe('importCsv — full flow', () => {
+  describe('importCsv PDF handling', () => {
+    it('passes the supplied password to the PDF parser', async () => {
+      const parser = {
+        parsePdf: jest.fn().mockResolvedValue({
+          rows: [
+            {
+              date: new Date('2026-02-01'),
+              merchant: 'Zomato',
+              amount: 331.7,
+              currency: 'INR',
+              type: 'debit',
+              rawText: '01/02/26 Zomato 331.70',
+              dedupKey: 'pdf-row-1',
+              category: 'food',
+            },
+          ],
+          errors: [],
+        }),
+        parse: jest.fn(),
+      } as unknown as CsvParserService;
+      service = new UploadsService(
+        prisma,
+        parser,
+        cache,
+        { applyRules: jest.fn().mockResolvedValue(undefined) } as never,
+        queue,
+      );
+
+      const pdfFile = makeFile('%PDF-1.7 fake', 'statement.pdf', 'application/pdf');
+      pdfFile.buffer = Buffer.from('%PDF-1.7 fake');
+
+      await service.importCsv('u1', pdfFile, '327919428');
+
+      expect(parser.parsePdf).toHaveBeenCalledWith(pdfFile.buffer, '327919428');
+      expect(prisma.transaction.create).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('importCsv full flow', () => {
     it('clears existing subscriptions and transactions before inserting', async () => {
       const file = makeFile(VALID_CSV, 'bank.csv');
 
@@ -108,7 +143,6 @@ describe('UploadsService', () => {
 
       const result = await service.importCsv('u1', file);
 
-      // 3 rows, all valid
       expect(result.inserted).toBe(3);
       expect(result.skipped).toBe(0);
       expect(result.failed).toBe(0);
@@ -117,9 +151,9 @@ describe('UploadsService', () => {
 
     it('skips duplicate rows (unique constraint violation)', async () => {
       (prisma.transaction.create as jest.Mock)
-        .mockResolvedValueOnce({}) // first row succeeds
-        .mockRejectedValueOnce({ code: 'P2002' }) // second row is duplicate
-        .mockResolvedValueOnce({}); // third succeeds
+        .mockResolvedValueOnce({})
+        .mockRejectedValueOnce({ code: 'P2002' })
+        .mockResolvedValueOnce({});
 
       const file = makeFile(VALID_CSV, 'bank.csv');
 
@@ -150,7 +184,6 @@ describe('UploadsService', () => {
     });
 
     it('does not enqueue jobs when nothing was inserted', async () => {
-      // Make all creates fail as duplicates
       (prisma.transaction.create as jest.Mock).mockRejectedValue({ code: 'P2002' });
       const file = makeFile(VALID_CSV, 'bank.csv');
 

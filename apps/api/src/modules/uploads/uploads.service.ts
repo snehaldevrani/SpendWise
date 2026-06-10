@@ -34,7 +34,7 @@ export class UploadsService {
 
     const isPdf = ext.endsWith('.pdf');
     const { rows, errors } = isPdf
-      ? await this.csvParser.parsePdf(file.buffer)
+      ? await this.csvParser.parsePdf(file.buffer, password)
       : await this.csvParser.parse(file.buffer, file.originalname, password);
 
     // Wipe previous data so each upload starts fresh

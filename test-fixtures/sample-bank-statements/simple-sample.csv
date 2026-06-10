@@ -1,0 +1,7 @@
+date,merchant,amount,type
+01/02/2026,Swiggy Order,350.00,debit
+02/02/2026,Zomato Limited,331.70,debit
+03/02/2026,Netflix Subscription,649.00,debit
+04/02/2026,Airtel Recharge,859.00,debit
+05/02/2026,Salary Credit,50000.00,credit
+06/02/2026,Amazon Shopping,1200.00,debit

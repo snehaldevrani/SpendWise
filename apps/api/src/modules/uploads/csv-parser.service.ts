@@ -278,36 +278,74 @@ export class CsvParserService {
    * Works with net banking exports — NOT scanned/image PDFs.
    * Looks for lines that begin with a date and contain decimal amounts.
    */
-  async parsePdf(buffer: Buffer): Promise<ParseResult> {
+  async parsePdf(buffer: Buffer, password?: string): Promise<ParseResult> {
     let pdfText: string;
+    let parser: { getText: () => Promise<{ text: string }>; destroy: () => Promise<void> } | undefined;
     try {
-      // pdf-parse is a CommonJS module
+      // pdf-parse is a CommonJS module in the Nest build.
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const pdfParse = require('pdf-parse') as (buf: Buffer) => Promise<{ text: string }>;
-      const data = await pdfParse(buffer);
+      const { PDFParse } = require('pdf-parse') as {
+        PDFParse: new (opts: { data: Buffer; password?: string }) => {
+          getText: () => Promise<{ text: string }>;
+          destroy: () => Promise<void>;
+        };
+      };
+      parser = new PDFParse({ data: buffer, ...(password ? { password } : {}) });
+      const data = await parser.getText();
       pdfText = data.text;
-    } catch {
+    } catch (err) {
+      const msg = (err as Error).message?.toLowerCase() ?? '';
+      if (msg.includes('password')) {
+        throw new BadRequestException(
+          password
+            ? 'Incorrect PDF password. Please check the statement password and try again.'
+            : 'PDF is password-protected. Please enter the statement password.',
+        );
+      }
       throw new BadRequestException(
         'Could not read PDF file. Please ensure it is a digital (not scanned) bank statement.',
       );
+    } finally {
+      await parser?.destroy().catch(() => undefined);
     }
 
+    return this.parsePdfText(pdfText);
+  }
+
+  parsePdfText(pdfText: string): ParseResult {
     const rows: ParsedRow[] = [];
     const errors: Array<{ row: number; message: string }> = [];
 
     const lines = pdfText.split('\n').map((l) => l.trim()).filter(Boolean);
     const dateRe = /^(\d{2}[\/\-]\d{2}[\/\-]\d{2,4})/;
+    const records: Array<{ row: number; text: string }> = [];
+    let current: { row: number; parts: string[] } | null = null;
     let rowNum = 0;
 
     for (const line of lines) {
-      if (rows.length >= MAX_ROWS) break;
       const dateMatch = line.match(dateRe);
+      if (dateMatch) {
+        if (current) records.push({ row: current.row, text: current.parts.join(' ') });
+        rowNum++;
+        current = { row: rowNum, parts: [line] };
+        continue;
+      }
+
+      if (current && !this.isPdfStatementNoise(line)) {
+        current.parts.push(line);
+      }
+    }
+
+    if (current) records.push({ row: current.row, text: current.parts.join(' ') });
+
+    for (const record of records) {
+      if (rows.length >= MAX_ROWS) break;
+      const dateMatch = record.text.match(dateRe);
       if (!dateMatch) continue;
-      rowNum++;
 
       try {
         const date = parseDate(dateMatch[1]);
-        const rest = line.slice(dateMatch[0].length).trim();
+        const rest = record.text.slice(dateMatch[0].length).trim();
 
         // Find all decimal amounts (e.g. 1,234.56 or 250.95)
         const amountMatches = [...rest.matchAll(/(\d{1,3}(?:,\d{3})*\.\d{2})/g)];
@@ -323,9 +361,9 @@ export class CsvParserService {
         const merchant = (firstAmtIdx > 0 ? rest.slice(0, firstAmtIdx) : rest).trim() || 'Unknown';
 
         // Determine credit vs debit from CR/DR markers
-        const upper = line.toUpperCase();
+        const upper = record.text.toUpperCase();
         const type: TransactionType =
-          upper.includes(' CR') || upper.includes('CREDIT') ? 'credit' : 'debit';
+          /\b(CR|CREDIT|DEPOSIT|SALARY|REFUND|INTEREST)\b/.test(upper) ? 'credit' : 'debit';
 
         const dedupKey = crypto
           .createHash('sha256')
@@ -338,12 +376,12 @@ export class CsvParserService {
           amount,
           currency: 'INR',
           type,
-          rawText: line,
+          rawText: record.text,
           dedupKey,
           category: categorize(merchant),
         });
       } catch (err) {
-        errors.push({ row: rowNum, message: (err as Error).message });
+        errors.push({ row: record.row, message: (err as Error).message });
       }
     }
 
@@ -354,5 +392,38 @@ export class CsvParserService {
     }
 
     return { rows, errors };
+  }
+
+  private isPdfStatementNoise(line: string): boolean {
+    return (
+      /^Page No/i.test(line) ||
+      /^--\s*\d+\s+of\s+\d+\s*--$/i.test(line) ||
+      /^Date\s+Narration\s+/i.test(line) ||
+      /^Statement of account/i.test(line) ||
+      /^Account Branch/i.test(line) ||
+      /^Address\s*:/i.test(line) ||
+      /^City\s*:/i.test(line) ||
+      /^State\s*:/i.test(line) ||
+      /^Phone no\./i.test(line) ||
+      /^OD Limit/i.test(line) ||
+      /^Currency\s*:/i.test(line) ||
+      /^Email\s*:/i.test(line) ||
+      /^Cust ID\s*:/i.test(line) ||
+      /^Account No\s*:/i.test(line) ||
+      /^A\/C Open Date/i.test(line) ||
+      /^Account Status/i.test(line) ||
+      /^RTGS\/NEFT IFSC/i.test(line) ||
+      /^Branch Code/i.test(line) ||
+      /^Account Type/i.test(line) ||
+      /^HDFC BANK LIMITED/i.test(line) ||
+      /^\*Closing balance/i.test(line) ||
+      /^Contents of this statement/i.test(line) ||
+      /^State account branch GSTN/i.test(line) ||
+      /^HDFC Bank GSTIN/i.test(line) ||
+      /^Registered Office Address/i.test(line) ||
+      /^MR\s+/i.test(line) ||
+      /^JOINT HOLDERS/i.test(line) ||
+      /^Nomination\s*:/i.test(line)
+    );
   }
 }

@@ -26,7 +26,7 @@ interface ProgressPayload {
   hasFailures: boolean;
 }
 
-const ACCEPTED = '.csv,.xlsx,.xls,.pdf';
+const ACCEPTED = '.csv,.xlsx,.pdf';
 
 const BANKS = [
   { id: 'hdfc',  label: 'HDFC Bank',   hint: 'Customer ID (printed on statement)' },
@@ -84,8 +84,8 @@ export function UploadDialog() {
 
   const handleFile = useCallback((f: File) => {
     const ext = f.name.toLowerCase();
-    if (!ext.endsWith('.csv') && !ext.endsWith('.xlsx') && !ext.endsWith('.xls') && !ext.endsWith('.pdf')) {
-      toast.error('Supported: CSV, XLS, XLSX, PDF');
+    if (!ext.endsWith('.csv') && !ext.endsWith('.xlsx') && !ext.endsWith('.pdf')) {
+      toast.error('Supported: CSV, XLSX, PDF');
       return;
     }
     setFile(f);
@@ -192,7 +192,7 @@ export function UploadDialog() {
           >
             <UploadCloud className={`h-10 w-10 mx-auto mb-3 transition-transform duration-150 ${dragOver ? 'scale-110 text-[var(--color-brand)]' : 'text-muted-foreground'}`} />
             <p className="text-sm font-medium text-foreground mb-1">Drop your statement here</p>
-            <p className="text-xs text-muted-foreground">CSV, XLS, XLSX or PDF · Max 10MB</p>
+            <p className="text-xs text-muted-foreground">CSV, XLSX or PDF · Max 10MB</p>
             <p className="text-xs text-muted-foreground mt-2">HDFC · ICICI · SBI · Axis · Kotak</p>
             <input id="csv-input" type="file" accept={ACCEPTED} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
           </div>
