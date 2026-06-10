@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import { api } from '@/lib/api';
-import { useUIStore } from '@/store';
+import { useUIStore, useChatStore } from '@/store';
 import type { CsvImportResult } from '@/lib/types';
 
 type UploadState = 'idle' | 'selected' | 'confirm' | 'uploading' | 'processing' | 'done' | 'error';
@@ -126,6 +126,7 @@ export function UploadDialog() {
       if (data.inserted > 0) {
         setTimeout(() => confetti({ particleCount: 60, spread: 60, origin: { y: 0.5 } }), 200);
         queryClient.invalidateQueries();
+        useChatStore.getState().clearHistory();
         toast.success(`${data.inserted} transactions imported`);
 
         if (data.jobIds?.length) {

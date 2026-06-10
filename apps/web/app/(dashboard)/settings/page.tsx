@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Switch } from '@/components/ui/switch';
 import { api } from '@/lib/api';
 import type { UserPreferences } from '@/lib/api';
-import { useAuthStore } from '@/store';
+import { useAuthStore, useChatStore } from '@/store';
 
 export default function SettingsPage() {
   const { user, logout } = useAuthStore();
@@ -92,6 +92,7 @@ export default function SettingsPage() {
     onSuccess: () => {
       setClearDialog(false);
       qc.invalidateQueries();
+      useChatStore.getState().clearHistory();
       toast.success('All transaction data cleared');
       router.refresh();
     },
